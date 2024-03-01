@@ -103,6 +103,8 @@ module types
     character*8, allocatable :: species_types(:), mc_swaps(:), mc_species(:)
     character*16 :: optimize = "vv", mc_relax_opt = "gd", mc_hybrid_opt = "vv"
     character*32 :: barostat = "none", thermostat = "none", barostat_sym = "isotropic"
+    integer :: dd_grid(3)
+    character*16 :: dd_grid_affinity = "block"
     logical :: do_md = .false., do_mc = .false., do_prediction = .false., do_forces = .false., do_derivatives = .false., &
                do_derivatives_fd = .false., write_soap = .false., write_derivatives = .false., &
                do_timing = .false., all_atoms = .true., print_progress = .true., scale_box = .false., &
