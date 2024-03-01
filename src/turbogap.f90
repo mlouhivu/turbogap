@@ -148,7 +148,6 @@ program turbogap
   logical, allocatable :: compress_soap_mpi(:)
 
   ! Domain decomposition
-  real*8, allocatable :: dd_grid_cells(:,:,:,4,3)
   real*8 :: cell(3:3), cell_origo(3)
   integer, allocatable :: color(:), dd_grid_root(:,:,:), placement(:)
   type(mpi_comm) :: local_comm, global_comm
@@ -803,12 +802,10 @@ program turbogap
 
 #ifdef _MPIF90
            call dd_surface_vectors(dd_surface, a_box, b_box, c_box)
-           call dd_init_borders(dd_borders_a, dd_borders_b, dd_borders_c, &
-                                dd_grid, a_box, b_box, c_box, dd_surface)
-
-           dd_placement(placement, dd_grid, dd_grid_root, dd_grid_cells, ntasks, &
-                       n_sites, positions, a_box, b_box, c_box)
-           n_sites_local = n_sites / 4
+           call dd_init_borders(dd_borders, dd_grid, a_box, b_box, c_box, &
+                                dd_surface)
+           call dd_placement(placement, dd_grid, dd_grid_root, n_sites, &
+                             positions, dd_surface, dd_borders)
 #endif
 
            ! call read_xyz(params%atoms_file, .true., params%all_atoms, params%do_timing, &

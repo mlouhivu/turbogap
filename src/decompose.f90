@@ -29,30 +29,6 @@ module decompose
 
 
 !**************************************************************************
-  subroutine dd_affinity_dense()
-    implicit none
-
-    integer, intent(out), allocatable :: ranks
-    integer, intent(in) :: dd_grid(3)
-
-    integer :: rank
-
-    allocate( ranks(dd_grid(0):dd_grid(1):dd_grid(2)) )
-    rank = 0
-    do i = 1, dd_grid(0)
-      do j = 1, dd_grid(1)
-        do k = 1, dd_grid(2)
-          ranks(i,j,k) = rank
-          rank = rank + 1
-        end do
-      end do
-    end do
-  end subroutine
-!**************************************************************************
-
-
-
-!**************************************************************************
   subroutine dd_assign(grid_root, color, grid, method, ntasks)
     implicit none
 
@@ -146,31 +122,6 @@ module decompose
         end if
       end do
     end do
-
-    return cell
-  end subroutine
-!**************************************************************************
-
-
-
-!**************************************************************************
-  subroutine dd_grid_cell(pos, grid, a_box, b_box, c_box)
-    implicit none
-
-    real*8, intent(in) :: pos(3)
-    integer, intent(in) :: dd_grid(3)
-    real*8, intent(in) :: a_box(3)
-    real*8, intent(in) :: b_box(3)
-    real*8, intent(in) :: c_box(3)
-
-    real*8 :: cell_size(3)
-    integer, intent(out) :: cell(3)
-
-    cell_size(0) = a_box(0) / dd_grid(0)
-    cell_size(1) = b_box(1) / dd_grid(1)
-    cell_size(2) = c_box(2) / dd_grid(2)
-
-    cell = (pos / cell_size) + 1
 
     return cell
   end subroutine
@@ -279,40 +230,6 @@ module decompose
         borders(i,j) = step(i) * (j-1)
       end do
     end do
-  end subroutine
-!**************************************************************************
-
-
-
-!**************************************************************************
-  subroutine dd_init_cells(grid_cells, grid, a_box, b_box, c_box)
-    implicit none
-
-    real*8, intent(out), allocatable :: grid_cells(:,:,:,:,:)
-    integer, intent(in) :: grid(3)
-    real*8, intent(in) :: a_box(3)
-    real*8, intent(in) :: b_box(3)
-    real*8, intent(in) :: c_box(3)
-
-    real*8 :: cell(3,3)
-    integer :: i, j, k
-
-    allocate(grid_cells(1:grid(1), 1:grid(2), 1:grid(3), 0:3, 1:3))
-
-    cell(1) = a_box / grid(1)
-    cell(2) = b_box / grid(2)
-    cell(3) = c_box / grid(3)
-
-    do i = 1, grid(1)
-      do j = 1, grid(2)
-        do k = 1, grid(3)
-          grid_cells(i,j,k,0) = (i-1) * cell(1) + (j-1) * cell(2) + (k-1) * cell(3)
-          grid_cells(i,j,k,1:3) = cell
-        end do
-      end do
-    end do
-
-    return cell
   end subroutine
 !**************************************************************************
 
