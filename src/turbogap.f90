@@ -34,6 +34,7 @@ program turbogap
   use gap
   use read_files
   use md
+  use decompose
   use adaptive_time			! for adaptive time simulation (TurboGAP will use these five modules for radiation cascades)
   use electronic_stopping		! for electronic stopping correction in radiation cascades
   use eph_fdm				! for T - dependent parameters - elec. stop. - eph model
@@ -99,7 +100,7 @@ program turbogap
   integer, allocatable :: n_neigh(:), neighbors_list(:), alpha_max(:), species(:), species_supercell(:), &
        neighbor_species(:), sph_temp_int(:), der_neighbors(:), der_neighbors_list(:), &
        i_beg_list(:), i_end_list(:), j_beg_list(:), j_end_list(:), species_idx(:), mc_id(:), n_mc_species(:)
-  integer :: n_sites, i, j, k, i2, j2, n_soap, k2, k3, l, n_sites_this, ierr, rank, ntasks, dim, n_sp, &
+  integer :: n_sites, n_sites_local, i, j, k, i2, j2, n_soap, k2, k3, l, n_sites_this, ierr, rank, ntasks, dim, n_sp, &
        n_pos, n_sp_sc, this_i_beg, this_i_end, this_j_beg, this_j_end, this_n_sites_mpi, n_sites_prev = 0, &
        n_atom_pairs_by_rank_prev, cPnz
   integer :: l_max, n_atom_pairs, n_max, ijunk, central_species = 0, n_atom_pairs_total
@@ -145,6 +146,13 @@ program turbogap
   integer :: i_beg, i_end, n_sites_mpi, j_beg, j_end, size_soap_turbo, size_distance_2b, size_angle_3b
   integer :: n_nonzero
   logical, allocatable :: compress_soap_mpi(:)
+
+  ! Domain decomposition
+  real*8, allocatable :: dd_grid_cells(:,:,:,4,3)
+  real*8 :: cell(3:3), cell_origo(3)
+  integer, allocatable :: color(:), dd_grid_root(:,:,:), placement(:)
+  type(mpi_comm) :: local_comm, global_comm
+  integer :: local_rank, local_ntasks, global_rank, global_ntasks
 
   ! Nested sampling
   real*8 :: e_max, e_kin, rand, rand_scale(1:6)
@@ -578,6 +586,29 @@ program turbogap
 #endif
      stop
   end if
+#ifdef _MPIF90
+! Split MPI ranks to domains
+  if (params%do_md) then
+    if (dd_grid(1) * dd_grid(2) * dd_grid(3) > ntasks) then
+      if (rank == 0) then
+        write(*,'(a,i0,x,i0,x,i0,a,i0,a)') &
+          & 'ERROR: domain decomposition grid (', &
+          & dd_grid(1), dd_grid(2), dd_grid(3), ') is too large for ', &
+          & ntasks, ' MPI tasks.'
+      end if
+      call mpi_finalize(ierr)
+      stop
+    end if
+    call dd_assign(dd_grid_root, color, &
+                   params%dd_grid, params%dd_grid_affinity, ntasks)
+    call mpi_comm_split(MPI_COMM_WORLD, color(rank), rank, local_comm, ierr)
+    call mpi_comm_size(local_comm, local_ntasks, ierr)
+    call mpi_comm_rank(local_comm, local_rank, ierr)
+    call mpi_comm_split(MPI_COMM_WORLD, local_rank, rank, global_comm, ierr)
+    call mpi_comm_size(global_comm, global_ntasks, ierr)
+    call mpi_comm_rank(global_comm, global_rank, ierr)
+  end if
+#endif
   call cpu_time(time_read_input(2))
   time_read_input(3) = time_read_input(3) + time_read_input(2) - time_read_input(1)
   !**************************************************************************
@@ -769,6 +800,16 @@ program turbogap
                    params%write_array_property(6), .false. )
 
            end if
+
+#ifdef _MPIF90
+           call dd_surface_vectors(dd_surface, a_box, b_box, c_box)
+           call dd_init_borders(dd_borders_a, dd_borders_b, dd_borders_c, &
+                                dd_grid, a_box, b_box, c_box, dd_surface)
+
+           dd_placement(placement, dd_grid, dd_grid_root, dd_grid_cells, ntasks, &
+                       n_sites, positions, a_box, b_box, c_box)
+           n_sites_local = n_sites / 4
+#endif
 
            ! call read_xyz(params%atoms_file, .true., params%all_atoms, params%do_timing, &
            !               n_species, params%species_types, repeat_xyz, rcut_max, params%which_atom, &
