@@ -62,9 +62,7 @@ module decompose
     integer, intent(in) :: method
     integer, intent(in) :: ntasks
 
-    integer :: rank
-    integer :: step
-    integer :: grid_size
+    integer :: rank, step, wrap, grid_size
 
     grid_size = grid(0) * grid(1) * grid(2)
 
@@ -99,29 +97,23 @@ module decompose
 
 
 !**************************************************************************
-  subroutine dd_placement(placement, grid, grid_root, grid_cells, ntasks, &
-                          n_sites, positions, a_box, b_box, c_box)
+  subroutine dd_placement(placement, grid, grid_root, n_sites, positions, &
+                          surface, borders)
     implicit none
     integer, intent(out), allocatable :: placement(:)
     integer, intent(in) :: grid(3)
-    integer, intent(in), allocatable :: grid_root(:,:,:)
-    real*8, intent(in), allocatable :: grid_cells(:,:,:,:,:)
-    integer, intent(in) :: ntasks
+    integer, intent(in) :: grid_root(:,:,:)
     integer, intent(in) :: n_sites
-    real*8, intent(in), allocatable :: positions(:)
-    real*8, intent(in) :: a_box(3)
-    real*8, intent(in) :: b_box(3)
-    real*8, intent(in) :: c_box(3)
+    real*8, intent(in) :: positions(:)
+    real*8, intent(in) :: surface(3,3)
+    real*8, intent(in) :: borders(:)
 
-    integer :: i, j, k
+    integer :: i
     integer :: cell(3)
-    integer, allocatable :: color
-    integer :: rank
 
     allocate( placement(1:n_sites) )
     do i = 1, n_sites
-      cell = find_grid_cell(positions(i), grid, surface, &
-                            borders_a, borders_b, borders_c)
+      cell = find_grid_cell(positions(i), grid, surface, borders)
       placement(i) = grid_root(cell(0), cell(1), cell(2))
     end do
   end subroutine
@@ -130,40 +122,29 @@ module decompose
 
 
 !**************************************************************************
-  subroutine find_grid_cell(pos, grid, surface, &
-                            borders_a, borders_b, borders_c)
+  subroutine find_grid_cell(pos, grid, surface, borders)
     implicit none
 
     real*8, intent(in) :: pos(3)
     integer, intent(in) :: grid(3)
     real*8, intent(in) :: surface(3,3)
-    real*8, intent(in) :: borders_a(:)
-    real*8, intent(in) :: borders_b(:)
-    real*8, intent(in) :: borders_c(:)
+    real*8, intent(in) :: borders(:)
 
     integer, intent(out) :: cell(3)
 
     real*8 :: norm(3)
-    integer :: i
+    integer :: i, j
 
     call projection(norm(1), surface(1), pos)
     call projection(norm(2), surface(2), pos)
     call projection(norm(3), surface(3), pos)
 
-    do i = 1, grid(1)
-      if (borders_a(i-1) < norm(1) .and. norm(1) <= borders_a(i)) then
-        cell(1) = i
-      end if
-    end do
-    do i = 1, grid(2)
-      if (borders_b(i-1) < norm(2) .and. norm(2) <= borders_b(i)) then
-        cell(2) = i
-      end if
-    end do
-    do i = 1, grid(3)
-      if (borders_c(i-1) < norm(3) .and. norm(3) <= borders_c(i)) then
-        cell(3) = i
-      end if
+    do i = 1, 3
+      do j = 1, grid(i)
+        if (borders(i, j-1) < norm(i) .and. norm(i) <= borders(i, j)) then
+          cell(i) = j
+        end if
+      end do
     end do
 
     return cell
@@ -237,6 +218,24 @@ module decompose
 
 
 !**************************************************************************
+  subroutine vectorised_projection(norm, s, v, n_sites)
+    implicit none
+
+    real*8, intent(out) :: norm(:)
+    real*8, intent(in) :: s(3)
+    real*8, intent(in) :: v(:,3)
+
+    integer :: i
+
+    do i = 1, n_sites
+      norm(i) = sqrt(s(1) * v(i,1) + s(2) * v(i,2) + s(3) * v(i,3))
+    end do
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
   subroutine projection(norm, s, v)
     implicit none
 
@@ -251,13 +250,10 @@ module decompose
 
 
 !**************************************************************************
-  subroutine dd_init_borders(dd_borders_a, dd_borders_b, dd_borders_c, &
-                             grid, a_box, b_box, c_box, surface)
+  subroutine dd_init_borders(borders, grid, a_box, b_box, c_box, surface)
     implicit none
 
-    real*8, intent(out), allocatable :: dd_borders_a(:)
-    real*8, intent(out), allocatable :: dd_borders_b(:)
-    real*8, intent(out), allocatable :: dd_borders_c(:)
+    real*8, intent(out), allocatable :: borders(:)
     integer, intent(in) :: grid(3)
     real*8, intent(in) :: a_box(3)
     real*8, intent(in) :: b_box(3)
@@ -265,11 +261,10 @@ module decompose
     real*8, intent(in) :: surface(3,3)
 
     real*8 :: full(3), step(3)
-    integer :: i
+    integer :: i, j, m
 
-    allocate(dd_borders_a(grid(1) + 1))
-    allocate(dd_borders_b(grid(2) + 1))
-    allocate(dd_borders_c(grid(3) + 1))
+    m = maxval(grid)
+    allocate(borders(3, m + 1))
 
     call projection(full(1), surface(1), a_box)
     call projection(full(2), surface(2), b_box)
@@ -277,21 +272,12 @@ module decompose
 
     step(:) = full(:) / grid(:)
 
-    dd_borders_a(0) = 0.0
-    dd_borders_b(0) = 0.0
-    dd_borders_c(0) = 0.0
-    dd_borders_a(grid(1) + 1) = full(i)
-    dd_borders_b(grid(2) + 1) = full(i)
-    dd_borders_c(grid(3) + 1) = full(i)
-
-    do i = 2, grid(1)
-      dd_borders_a(i) = step(1) * (i-1)
-    end do
-    do i = 2, grid(2)
-      dd_borders_b(i) = step(2) * (i-1)
-    end do
-    do i = 2, grid(3)
-      dd_borders_c(i) = step(3) * (i-1)
+    do i = 1,3
+      borders(i)(0) = 0.0
+      borders(i)(grid(i) + 1) = full(i)
+      do j = 2, grid(i)
+        borders(i,j) = step(i) * (j-1)
+      end do
     end do
   end subroutine
 !**************************************************************************
