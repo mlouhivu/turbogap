@@ -29,16 +29,15 @@ module decompose
 
 
 !**************************************************************************
-  subroutine dd_assign(grid_root, color, grid, method, ntasks)
+  subroutine dd_assign(color, grid, method, ntasks)
     implicit none
 
-    integer, intent(out), allocatable :: grid_root
     integer, intent(out), allocatable :: color
     integer, intent(in) :: grid(3)
     integer, intent(in) :: method
     integer, intent(in) :: ntasks
 
-    integer :: rank, step, wrap, grid_size
+    integer :: step, wrap, grid_size
 
     grid_size = grid(0) * grid(1) * grid(2)
 
@@ -56,16 +55,46 @@ module decompose
     do i = 1, ntasks
       color(i) = (((i - 1) / step) * step) % wrap + 1
     end do
+  end subroutine
+!**************************************************************************
 
-    allocate( grid_root(1:grid(1), 1:grid(2), 1:grid(3)) )
-    rank = 0
-    do i = 1, grid(1)
-      do j = 1, grid(2)
-        do k = 1, grid(3)
-          grid_root(i,j,k) = rank
-          rank = rank + step
-        end do
-      end do
+
+
+!**************************************************************************
+  subroutine get_grid_coords(grid_coords, grid_comm, ntasks)
+    implicit none
+    integer, intent(out), allocatable :: grid_coords(:,:)
+    type(mpi_comm), intent(in) :: grid_comm
+    integer, intent(in) :: ntasks
+
+    integer :: i, ierr
+    integer :: coord(3)
+
+    allocate( grid_coords(0:ntasks-1, 3) )
+    do i = 0, ntasks - 1
+      call mpi_cart_coords(grid_comm, i, 3, grid_coords(i), ierr)
+    end do
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
+  subroutine get_grid_root(grid_root, grid_coords, ntasks, grid)
+    implicit none
+    integer, intent(out), allocatable :: grid_root(:,:,:)
+    integer, intent(in) :: grid_coords(:,:)
+    integer, intent(in) :: ntasks
+    integer, intent(in) :: grid(3)
+
+    integer :: rank, i, j, k
+
+    allocate( grid_root(grid(1), grid(2), grid(3)) )
+    do rank = 0, ntasks - 1
+      i = grid_coords(rank, 1)
+      j = grid_coords(rank, 2)
+      k = grid_coords(rank, 3)
+      grid_root(i, j, k) = rank
     end do
   end subroutine
 !**************************************************************************
