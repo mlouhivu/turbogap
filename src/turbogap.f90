@@ -589,16 +589,7 @@ program turbogap
 #ifdef _MPIF90
 ! Split MPI ranks to domains
   if (params%do_md) then
-    if (dd_grid(1) * dd_grid(2) * dd_grid(3) > ntasks) then
-      if (rank == 0) then
-        write(*,'(a,i0,x,i0,x,i0,a,i0,a)') &
-          & 'ERROR: domain decomposition grid (', &
-          & dd_grid(1), dd_grid(2), dd_grid(3), ') is too large for ', &
-          & ntasks, ' MPI tasks.'
-      end if
-      call mpi_finalize(ierr)
-      stop
-    end if
+    check_grid(params%dd_grid, params%dd_grid_affinity)
     call dd_assign(color, params%dd_grid, params%dd_grid_affinity, ntasks)
     call mpi_comm_split(MPI_COMM_WORLD, color(rank), rank, local_comm, ierr)
     call mpi_comm_size(local_comm, local_ntasks, ierr)

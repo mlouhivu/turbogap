@@ -29,6 +29,52 @@ module decompose
 
 
 !**************************************************************************
+  subroutine check_grid(grid, method)
+    implicit none
+
+    integer, intent(in) :: grid(3)
+    character*16, intent(in) :: method
+
+    integer :: rank, ntasks, ierr
+
+    call mpi_comm_size(MPI_COMM_WORLD, ntasks, ierr)
+    call mpi_comm_rank(MPI_COMM_WORLD, rank, ierr)
+
+    grid_size = grid(1) * grid(2) * grid(3)
+
+    if (grid_size > ntasks) then
+      if (rank == 0) then
+        write(*,'(a,i0,x,i0,x,i0,a,i0,a)') &
+          & 'ERROR: domain decomposition grid (', &
+          & grid(1), grid(2), grid(3), ') is too large for ', &
+          & ntasks, ' MPI tasks.'
+      end if
+      call mpi_finalize(ierr)
+      stop
+    end if
+    if (ntasks % grid_size > 0) then
+      if (rank == 0) then
+        write(*, '(a,i0,a,i0,x,i0,x,i0,a)') &
+          & 'WARNING: non-uniform distribution of MPI tasks (', &
+          & ntasks, ') in the domain decomposition grid (', &
+          & grid(1), grid(2), grid(3), ')'
+      end if
+      if (method == "block") then
+        if (rank == 0) then
+          write(*, '(a,a)') &
+            & 'ERROR: dd_grid_affinity "block" requires uniform', &
+            & 'distribution of MPI tasks'
+        end if
+        call mpi_finalize(ierr)
+        stop
+      end if
+    end if
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
   subroutine dd_assign(color, grid, method, ntasks)
     implicit none
 
