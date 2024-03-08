@@ -78,9 +78,9 @@ module decompose
   subroutine dd_assign(color, grid, method, ntasks)
     implicit none
 
-    integer, intent(out), allocatable :: color
+    integer, intent(out), allocatable :: color(:)
     integer, intent(in) :: grid(3)
-    integer, intent(in) :: method
+    character*16, intent(in) :: method
     integer, intent(in) :: ntasks
 
     integer :: step, wrap, grid_size
@@ -97,9 +97,9 @@ module decompose
       wrap = ntasks
     endif
 
-    allocate( color(1:ntasks) )
+    allocate(color(ntasks))
     do i = 1, ntasks
-      color(i) = (((i - 1) / step) * step) % wrap + 1
+      color(i) = ((i - 1) / step) % wrap
     end do
   end subroutine
 !**************************************************************************
@@ -116,9 +116,9 @@ module decompose
     integer :: i, ierr
     integer :: coord(3)
 
-    allocate( grid_coords(0:ntasks-1, 3) )
-    do i = 0, ntasks - 1
-      call mpi_cart_coords(grid_comm, i, 3, grid_coords(i), ierr)
+    allocate(grid_coords(ntasks, 3))
+    do i = 1, ntasks
+      call mpi_cart_coords(grid_comm, i - 1, 3, grid_coords(i), ierr)
     end do
   end subroutine
 !**************************************************************************
@@ -135,8 +135,8 @@ module decompose
 
     integer :: rank, i, j, k
 
-    allocate( grid_root(grid(1), grid(2), grid(3)) )
-    do rank = 0, ntasks - 1
+    allocate(grid_root(grid(1), grid(2), grid(3)))
+    do rank = 1, ntasks
       i = grid_coords(rank, 1)
       j = grid_coords(rank, 2)
       k = grid_coords(rank, 3)
@@ -162,10 +162,10 @@ module decompose
     integer :: i
     integer :: cell(3)
 
-    allocate( placement(1:n_sites) )
+    allocate( placement(n_sites) )
     do i = 1, n_sites
-      cell = find_grid_cell(positions(i), grid, surface, borders)
-      placement(i) = grid_root(cell(0), cell(1), cell(2))
+      call find_grid_cell(cell, positions(i), grid, surface, borders)
+      placement(i) = grid_root(cell(1), cell(2), cell(3))
     end do
   end subroutine
 !**************************************************************************
@@ -173,15 +173,14 @@ module decompose
 
 
 !**************************************************************************
-  subroutine find_grid_cell(pos, grid, surface, borders)
+  subroutine find_grid_cell(cell, pos, grid, surface, borders)
     implicit none
 
+    integer, intent(out) :: cell(3)
     real*8, intent(in) :: pos(3)
     integer, intent(in) :: grid(3)
     real*8, intent(in) :: surface(3,3)
     real*8, intent(in) :: borders(:)
-
-    integer, intent(out) :: cell(3)
 
     real*8 :: norm(3)
     integer :: i, j
@@ -197,8 +196,6 @@ module decompose
         end if
       end do
     end do
-
-    return cell
   end subroutine
 !**************************************************************************
 
@@ -247,9 +244,9 @@ module decompose
   subroutine vectorised_projection(norm, s, v, n_sites)
     implicit none
 
-    real*8, intent(out) :: norm(:)
+    real*8, intent(out) :: norm(n_sites)
     real*8, intent(in) :: s(3)
-    real*8, intent(in) :: v(:,3)
+    real*8, intent(in) :: v(n_sites,3)
 
     integer :: i
 

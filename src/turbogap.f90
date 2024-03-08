@@ -149,10 +149,11 @@ program turbogap
 
   ! Domain decomposition
   real*8 :: cell(3:3), cell_origo(3)
-  integer, allocatable :: color(:), dd_grid_root(:,:,:), placement(:)
+  integer, allocatable :: color(:), grid_coords(:,:), grid_root(:,:,:), &
+                          placement(:)
   type(mpi_comm) :: local_comm, global_comm, grid_comm
   integer :: local_rank, local_ntasks, global_rank, global_ntasks
-  integer :: neighbor(6), grid_coords(3)
+  integer :: neighbor(6)
 
   ! Nested sampling
   real*8 :: e_max, e_kin, rand, rand_scale(1:6)
@@ -591,7 +592,7 @@ program turbogap
   if (params%do_md) then
     check_grid(params%dd_grid, params%dd_grid_affinity)
     call dd_assign(color, params%dd_grid, params%dd_grid_affinity, ntasks)
-    call mpi_comm_split(MPI_COMM_WORLD, color(rank), rank, local_comm, ierr)
+    call mpi_comm_split(MPI_COMM_WORLD, color(rank + 1), rank, local_comm, ierr)
     call mpi_comm_size(local_comm, local_ntasks, ierr)
     call mpi_comm_rank(local_comm, local_rank, ierr)
     call mpi_comm_split(MPI_COMM_WORLD, local_rank, rank, global_comm, ierr)
