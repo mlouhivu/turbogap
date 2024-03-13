@@ -601,15 +601,13 @@ program turbogap
     call mpi_comm_split(MPI_COMM_WORLD, local_rank, rank, global_comm, ierr)
     call mpi_comm_size(global_comm, global_ntasks, ierr)
     call mpi_comm_rank(global_comm, global_rank, ierr)
-    if (local_rank == 0) then
-      call mpi_cart_create(global_comm, 3, params%dd_grid, grid_periodic, &
-                           .false., grid_comm, ierr)
-      call mpi_cart_shift(grid_comm, 0, 1, neighbor(1), neighbor(2), ierr)
-      call mpi_cart_shift(grid_comm, 1, 1, neighbor(3), neighbor(4), ierr)
-      call mpi_cart_shift(grid_comm, 2, 1, neighbor(5), neighbor(6), ierr)
-      call get_grid_coords(grid_coords, grid_comm, global_ntasks)
-      call get_grid_root(grid_root, grid_coords, global_ntasks, params%dd_grid)
-    end if
+    call mpi_cart_create(global_comm, 3, params%dd_grid, grid_periodic, &
+                         .false., grid_comm, ierr)
+    call mpi_cart_shift(grid_comm, 0, 1, neighbor(1), neighbor(2), ierr)
+    call mpi_cart_shift(grid_comm, 1, 1, neighbor(3), neighbor(4), ierr)
+    call mpi_cart_shift(grid_comm, 2, 1, neighbor(5), neighbor(6), ierr)
+    call get_grid_coords(grid_coords, grid_comm, global_ntasks)
+    call get_grid_root(grid_root, grid_coords, global_ntasks, params%dd_grid)
   end if
 #endif
   call cpu_time(time_read_input(2))
