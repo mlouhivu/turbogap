@@ -606,6 +606,9 @@ end if
       else if(keyword=='do_derivatives_fd')then
         backspace(10)
         read(10, *, iostat=iostatus) cjunk, cjunk, params%do_derivatives_fd
+      else if(keyword=='do_dd')then
+        backspace(10)
+        read(10, *, iostat=iostatus) cjunk, cjunk, params%do_dd
       else if(keyword=='write_soap')then
         backspace(10)
         read(10, *, iostat=iostatus) cjunk, cjunk, params%write_soap
@@ -1181,6 +1184,12 @@ end if
           write(*,*)'ERROR: your "species" keyword is wrong |  <-- ERROR'
           stop
         end if
+      else if (keyword == 'dd_grid') then
+        backspace(10)
+        read(10, *, iostat=iostatus) cjunk, cjunk, (params%dd_grid(nw),nw=1,3)
+      else if (keyword == 'dd_grid_affinity') then
+        backspace(10)
+        read(10, *, iostat=iostatus) cjunk, cjunk, params%dd_grid_affinity
       else
         write(*,*)"ERROR: I do not recognize the input file keyword", keyword
         stop
