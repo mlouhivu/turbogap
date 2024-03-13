@@ -151,9 +151,12 @@ program turbogap
   real*8 :: cell(3:3), cell_origo(3)
   integer, allocatable :: color(:), grid_coords(:,:), grid_root(:,:,:), &
                           placement(:)
-  type(mpi_comm) :: local_comm, global_comm, grid_comm
+  integer :: local_comm, global_comm, grid_comm
   integer :: local_rank, local_ntasks, global_rank, global_ntasks
-  integer :: neighbor(6)
+  integer :: dd_grid(3), neighbor(6)
+  logical :: grid_periodic(3) = (/ .true., .true., .true. /)
+  real*8, allocatable :: dd_borders(:,:)
+  real*8 :: dd_surface(3,3)
 
   ! Nested sampling
   real*8 :: e_max, e_kin, rand, rand_scale(1:6)
@@ -590,7 +593,7 @@ program turbogap
 #ifdef _MPIF90
 ! Split MPI ranks to domains
   if (params%do_md) then
-    check_grid(params%dd_grid, params%dd_grid_affinity)
+    call check_grid(params%dd_grid, params%dd_grid_affinity)
     call dd_assign(color, params%dd_grid, params%dd_grid_affinity, ntasks)
     call mpi_comm_split(MPI_COMM_WORLD, color(rank + 1), rank, local_comm, ierr)
     call mpi_comm_size(local_comm, local_ntasks, ierr)
@@ -599,8 +602,8 @@ program turbogap
     call mpi_comm_size(global_comm, global_ntasks, ierr)
     call mpi_comm_rank(global_comm, global_rank, ierr)
     if (local_rank == 0) then
-      call mpi_cart_create(global_comm, 3, params%dd_grid, period, .false.,
-                           grid_comm, ierr)
+      call mpi_cart_create(global_comm, 3, params%dd_grid, grid_periodic, &
+                           .false., grid_comm, ierr)
       call mpi_cart_shift(grid_comm, 0, 1, neighbor(1), neighbor(2), ierr)
       call mpi_cart_shift(grid_comm, 1, 1, neighbor(3), neighbor(4), ierr)
       call mpi_cart_shift(grid_comm, 2, 1, neighbor(5), neighbor(6), ierr)
@@ -805,7 +808,7 @@ program turbogap
            call dd_surface_vectors(dd_surface, a_box, b_box, c_box)
            call dd_init_borders(dd_borders, dd_grid, a_box, b_box, c_box, &
                                 dd_surface)
-           call dd_placement(placement, dd_grid, dd_grid_root, n_sites, &
+           call dd_placement(placement, dd_grid, grid_root, n_sites, &
                              positions, dd_surface, dd_borders)
 #endif
 

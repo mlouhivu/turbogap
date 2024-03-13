@@ -30,12 +30,14 @@ module decompose
 
 !**************************************************************************
   subroutine check_grid(grid, method)
+    use mpi
     implicit none
 
     integer, intent(in) :: grid(3)
     character*16, intent(in) :: method
 
     integer :: rank, ntasks, ierr
+    integer :: grid_size
 
     call mpi_comm_size(MPI_COMM_WORLD, ntasks, ierr)
     call mpi_comm_rank(MPI_COMM_WORLD, rank, ierr)
@@ -52,7 +54,7 @@ module decompose
       call mpi_finalize(ierr)
       stop
     end if
-    if (ntasks % grid_size > 0) then
+    if (mod(ntasks, grid_size) > 0) then
       if (rank == 0) then
         write(*, '(a,i0,a,i0,x,i0,x,i0,a)') &
           & 'WARNING: non-uniform distribution of MPI tasks (', &
@@ -83,15 +85,15 @@ module decompose
     character*16, intent(in) :: method
     integer, intent(in) :: ntasks
 
-    integer :: step, wrap, grid_size
+    integer :: i, step, wrap, grid_size
 
-    grid_size = grid(0) * grid(1) * grid(2)
+    grid_size = grid(1) * grid(2) * grid(3)
 
     if (method == "cyclic") then
       ! first MPI ranks do MD
       step = 1
       wrap = grid_size
-    else (method == "block") then
+    else if (method == "block") then
       ! spread MD ranks uniformly
       step = (ntasks - 1) / grid_size + 1
       wrap = ntasks
@@ -99,7 +101,7 @@ module decompose
 
     allocate(color(ntasks))
     do i = 1, ntasks
-      color(i) = ((i - 1) / step) % wrap
+      color(i) = mod((i - 1) / step, wrap)
     end do
   end subroutine
 !**************************************************************************
@@ -110,7 +112,7 @@ module decompose
   subroutine get_grid_coords(grid_coords, grid_comm, ntasks)
     implicit none
     integer, intent(out), allocatable :: grid_coords(:,:)
-    type(mpi_comm), intent(in) :: grid_comm
+    integer, intent(in) :: grid_comm
     integer, intent(in) :: ntasks
 
     integer :: i, ierr
@@ -118,7 +120,7 @@ module decompose
 
     allocate(grid_coords(ntasks, 3))
     do i = 1, ntasks
-      call mpi_cart_coords(grid_comm, i - 1, 3, grid_coords(i), ierr)
+      call mpi_cart_coords(grid_comm, i - 1, 3, grid_coords(i,:), ierr)
     end do
   end subroutine
 !**************************************************************************
@@ -155,16 +157,16 @@ module decompose
     integer, intent(in) :: grid(3)
     integer, intent(in) :: grid_root(:,:,:)
     integer, intent(in) :: n_sites
-    real*8, intent(in) :: positions(:)
+    real*8, intent(in) :: positions(:,:)
     real*8, intent(in) :: surface(3,3)
-    real*8, intent(in) :: borders(:)
+    real*8, intent(in) :: borders(:,:)
 
     integer :: i
     integer :: cell(3)
 
     allocate( placement(n_sites) )
     do i = 1, n_sites
-      call find_grid_cell(cell, positions(i), grid, surface, borders)
+      call find_grid_cell(cell, positions(i,:), grid, surface, borders)
       placement(i) = grid_root(cell(1), cell(2), cell(3))
     end do
   end subroutine
@@ -180,14 +182,14 @@ module decompose
     real*8, intent(in) :: pos(3)
     integer, intent(in) :: grid(3)
     real*8, intent(in) :: surface(3,3)
-    real*8, intent(in) :: borders(:)
+    real*8, intent(in) :: borders(:,:)
 
     real*8 :: norm(3)
     integer :: i, j
 
-    call projection(norm(1), surface(1), pos)
-    call projection(norm(2), surface(2), pos)
-    call projection(norm(3), surface(3), pos)
+    call projection(norm(1), surface(1,:), pos)
+    call projection(norm(2), surface(2,:), pos)
+    call projection(norm(3), surface(3,:), pos)
 
     do i = 1, 3
       do j = 1, grid(i)
@@ -232,9 +234,9 @@ module decompose
     real*8, intent(in) :: b_box(3)
     real*8, intent(in) :: c_box(3)
 
-    call surface_vector(surface(1), b_box, c_box)
-    call surface_vector(surface(2), c_box, a_box)
-    call surface_vector(surface(3), a_box, b_box)
+    call surface_vector(surface(1,:), b_box, c_box)
+    call surface_vector(surface(2,:), c_box, a_box)
+    call surface_vector(surface(3,:), a_box, b_box)
   end subroutine
 !**************************************************************************
 
@@ -247,6 +249,7 @@ module decompose
     real*8, intent(out) :: norm(n_sites)
     real*8, intent(in) :: s(3)
     real*8, intent(in) :: v(n_sites,3)
+    integer, intent(in) :: n_sites
 
     integer :: i
 
@@ -276,7 +279,7 @@ module decompose
   subroutine dd_init_borders(borders, grid, a_box, b_box, c_box, surface)
     implicit none
 
-    real*8, intent(out), allocatable :: borders(:)
+    real*8, intent(out), allocatable :: borders(:,:)
     integer, intent(in) :: grid(3)
     real*8, intent(in) :: a_box(3)
     real*8, intent(in) :: b_box(3)
@@ -289,15 +292,15 @@ module decompose
     m = maxval(grid)
     allocate(borders(3, m + 1))
 
-    call projection(full(1), surface(1), a_box)
-    call projection(full(2), surface(2), b_box)
-    call projection(full(3), surface(3), c_box)
+    call projection(full(1), surface(1,:), a_box)
+    call projection(full(2), surface(2,:), b_box)
+    call projection(full(3), surface(3,:), c_box)
 
     step(:) = full(:) / grid(:)
 
     do i = 1,3
-      borders(i)(0) = 0.0
-      borders(i)(grid(i) + 1) = full(i)
+      borders(i,0) = 0.0
+      borders(i,grid(i) + 1) = full(i)
       do j = 2, grid(i)
         borders(i,j) = step(i) * (j-1)
       end do
