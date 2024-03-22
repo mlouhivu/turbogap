@@ -1190,6 +1190,9 @@ end if
       else if (keyword == 'dd_grid_affinity') then
         backspace(10)
         read(10, *, iostat=iostatus) cjunk, cjunk, params%dd_grid_affinity
+      else if (keyword == 'dd_debug') then
+        backspace(10)
+        read(10, *, iostat=iostatus) cjunk, cjunk, params%dd_debug
       else
         write(*,*)"ERROR: I do not recognize the input file keyword", keyword
         stop

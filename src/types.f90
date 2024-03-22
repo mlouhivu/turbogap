@@ -105,6 +105,7 @@ module types
     character*32 :: barostat = "none", thermostat = "none", barostat_sym = "isotropic"
     integer :: dd_grid(3)
     character*16 :: dd_grid_affinity = "block"
+    logical :: dd_debug = .false.
     logical :: do_md = .false., do_mc = .false., do_prediction = .false., do_forces = .false., do_derivatives = .false., &
                do_derivatives_fd = .false., do_dd = .false., write_soap = .false., write_derivatives = .false., &
                do_timing = .false., all_atoms = .true., print_progress = .true., scale_box = .false., &
