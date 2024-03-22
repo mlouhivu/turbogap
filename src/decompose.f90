@@ -142,7 +142,7 @@ module decompose
       i = grid_coords(rank, 1)
       j = grid_coords(rank, 2)
       k = grid_coords(rank, 3)
-      grid_root(i, j, k) = rank
+      grid_root(i, j, k) = rank - 1
     end do
   end subroutine
 !**************************************************************************
