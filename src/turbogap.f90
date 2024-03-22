@@ -606,8 +606,17 @@ program turbogap
     call mpi_cart_shift(grid_comm, 0, 1, neighbor(1), neighbor(2), ierr)
     call mpi_cart_shift(grid_comm, 1, 1, neighbor(3), neighbor(4), ierr)
     call mpi_cart_shift(grid_comm, 2, 1, neighbor(5), neighbor(6), ierr)
-    call get_grid_coords(grid_coords, grid_comm, global_ntasks)
-    call get_grid_root(grid_root, grid_coords, global_ntasks, params%dd_grid)
+    allocate(grid_coords(global_ntasks, 3))
+    allocate(grid_root(params%dd_grid(1), params%dd_grid(2), params%dd_grid(3)))
+    if (rank == 0) then
+      call get_grid_coords(grid_coords, grid_comm, global_ntasks)
+      call get_grid_root(grid_root, grid_coords, global_ntasks)
+    endif
+    call mpi_bcast(grid_coords, global_ntasks * 3, MPI_INTEGER, 0, &
+                   MPI_COMM_WORLD, ierr)
+    call mpi_bcast(grid_root, &
+                   params%dd_grid(1) * params%dd_grid(2) * params%dd_grid(3), &
+                   MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
     if (params%dd_debug) then
       call print_dd(rank, ntasks, local_rank, global_rank, color, &
                     grid_coords, grid_root)

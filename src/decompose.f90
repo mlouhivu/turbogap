@@ -111,14 +111,12 @@ module decompose
 !**************************************************************************
   subroutine get_grid_coords(grid_coords, grid_comm, ntasks)
     implicit none
-    integer, intent(out), allocatable :: grid_coords(:,:)
+    integer, intent(out) :: grid_coords(:,:)
     integer, intent(in) :: grid_comm
     integer, intent(in) :: ntasks
 
     integer :: i, ierr
-    integer :: coord(3)
 
-    allocate(grid_coords(ntasks, 3))
     do i = 1, ntasks
       call mpi_cart_coords(grid_comm, i - 1, 3, grid_coords(i,:), ierr)
     end do
@@ -128,16 +126,14 @@ module decompose
 
 
 !**************************************************************************
-  subroutine get_grid_root(grid_root, grid_coords, ntasks, grid)
+  subroutine get_grid_root(grid_root, grid_coords, ntasks)
     implicit none
-    integer, intent(out), allocatable :: grid_root(:,:,:)
+    integer, intent(out) :: grid_root(:,:,:)
     integer, intent(in) :: grid_coords(:,:)
     integer, intent(in) :: ntasks
-    integer, intent(in) :: grid(3)
 
     integer :: rank, i, j, k
 
-    allocate(grid_root(grid(1), grid(2), grid(3)))
     do rank = 1, ntasks
       i = grid_coords(rank, 1)
       j = grid_coords(rank, 2)
