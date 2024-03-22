@@ -601,6 +601,20 @@ program turbogap
     call mpi_comm_split(MPI_COMM_WORLD, local_rank, rank, global_comm, ierr)
     call mpi_comm_size(global_comm, global_ntasks, ierr)
     call mpi_comm_rank(global_comm, global_rank, ierr)
+!    neighbor(1) = mod(global_rank - 1, global_ntasks)
+!    neighbor(2) = mod(global_rank + 1, global_ntasks)
+!    neighbor(3) = mod(global_rank - params%dd_grid(1), global_ntasks)
+!    neighbor(4) = mod(global_rank + params%dd_grid(1), global_ntasks)
+!    neighbor(5) = mod(global_rank - params%dd_grid(1) * params%dd_grid(2), global_ntasks)
+!    neighbor(6) = mod(global_rank + params%dd_grid(1) * params%dd_grid(2), global_ntasks)
+!    allocate(grid_coords(global_ntasks,3))
+!    do i = 1, global_ntasks
+!      grid_coords(i,1) = mod((i-1), params%dd_grid(1))
+!      grid_coords(i,2) = mod((i-1) / params%dd_grid(1), &
+!                             params%dd_grid(1) * params%dd_grid(2))
+!      grid_coords(i,3) = mod((i-1) / (params%dd_grid(1) * params%dd_grid(2)), &
+!                             params%dd_grid(1) * params%dd_grid(2) * params%dd_grid(3))
+!    end do
     call mpi_cart_create(global_comm, 3, params%dd_grid, grid_periodic, &
                          .false., grid_comm, ierr)
     call mpi_cart_shift(grid_comm, 0, 1, neighbor(1), neighbor(2), ierr)
