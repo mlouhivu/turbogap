@@ -153,10 +153,10 @@ program turbogap
                           placement(:)
   integer :: local_comm, global_comm, grid_comm
   integer :: local_rank, local_ntasks, global_rank, global_ntasks
-  integer :: dd_grid(3), neighbor(6)
+  integer :: neighbor(6)
   logical :: grid_periodic(3) = (/ .true., .true., .true. /)
-  real*8, allocatable :: dd_borders(:,:)
-  real*8 :: dd_surface(3,3)
+  real*8, allocatable :: grid_borders(:,:)
+  real*8 :: grid_surface(3,3)
 
   ! Nested sampling
   real*8 :: e_max, e_kin, rand, rand_scale(1:6)
@@ -594,7 +594,7 @@ program turbogap
 ! Split MPI ranks to domains
   if (params%do_md) then
     call check_grid(params%dd_grid, params%dd_grid_affinity)
-    call dd_assign(color, params%dd_grid, params%dd_grid_affinity, ntasks)
+    call grid_affinity(color, params%dd_grid, params%dd_grid_affinity, ntasks)
     call mpi_comm_split(MPI_COMM_WORLD, color(rank + 1), rank, local_comm, ierr)
     call mpi_comm_size(local_comm, local_ntasks, ierr)
     call mpi_comm_rank(local_comm, local_rank, ierr)
@@ -618,8 +618,8 @@ program turbogap
                    params%dd_grid(1) * params%dd_grid(2) * params%dd_grid(3), &
                    MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
     if (params%dd_debug) then
-      call print_dd(rank, ntasks, local_rank, global_rank, color, &
-                    grid_coords, grid_root)
+      call print_grid(rank, ntasks, local_rank, global_rank, color, &
+                      grid_coords, grid_root)
     endif
   end if
 #endif
@@ -816,11 +816,11 @@ program turbogap
            end if
 
 #ifdef _MPIF90
-           call dd_surface_vectors(dd_surface, a_box, b_box, c_box)
-           call dd_init_borders(dd_borders, dd_grid, a_box, b_box, c_box, &
-                                dd_surface)
-           call dd_placement(placement, dd_grid, grid_root, n_sites, &
-                             positions, dd_surface, dd_borders)
+           call get_surface_vectors(grid_surface, a_box, b_box, c_box)
+           call init_grid_borders(grid_borders, params%dd_grid, &
+                                  a_box, b_box, c_box, grid_surface)
+           call grid_placement(placement, params%dd_grid, grid_root, n_sites, &
+                               positions, grid_surface, grid_borders)
 #endif
 
            ! call read_xyz(params%atoms_file, .true., params%all_atoms, params%do_timing, &

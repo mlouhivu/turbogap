@@ -77,7 +77,7 @@ module decompose
 
 
 !**************************************************************************
-  subroutine dd_assign(color, grid, method, ntasks)
+  subroutine grid_affinity(color, grid, method, ntasks)
     implicit none
 
     integer, intent(out), allocatable :: color(:)
@@ -146,8 +146,8 @@ module decompose
 
 
 !**************************************************************************
-  subroutine dd_placement(placement, grid, grid_root, n_sites, positions, &
-                          surface, borders)
+  subroutine grid_placement(placement, grid, grid_root, n_sites, positions, &
+                            surface, borders)
     implicit none
     integer, intent(out), allocatable :: placement(:)
     integer, intent(in) :: grid(3)
@@ -222,7 +222,7 @@ module decompose
 
 
 !**************************************************************************
-  subroutine dd_surface_vectors(surface, a_box, b_box, c_box)
+  subroutine get_surface_vectors(surface, a_box, b_box, c_box)
     implicit none
 
     real*8, intent(out) :: surface(3,3)
@@ -272,7 +272,7 @@ module decompose
 
 
 !**************************************************************************
-  subroutine dd_init_borders(borders, grid, a_box, b_box, c_box, surface)
+  subroutine init_grid_borders(borders, grid, a_box, b_box, c_box, surface)
     implicit none
 
     real*8, intent(out), allocatable :: borders(:,:)
@@ -307,8 +307,8 @@ module decompose
 
 
 !**************************************************************************
-  subroutine print_dd(rank, ntasks, local_rank, global_rank, color, &
-                      grid_coords, grid_root)
+  subroutine print_grid(rank, ntasks, local_rank, global_rank, color, &
+                        grid_coords, grid_root)
     use mpi
     implicit none
 
