@@ -308,4 +308,44 @@ module decompose
   end subroutine
 !**************************************************************************
 
+
+
+!**************************************************************************
+  subroutine print_dd(rank, ntasks, local_rank, global_rank, color, &
+                      grid_coords, grid_root)
+    use mpi
+    implicit none
+
+    integer, intent(in) :: rank
+    integer, intent(in) :: ntasks
+    integer, intent(in) :: local_rank
+    integer, intent(in) :: global_rank
+    integer, intent(in) :: color(:)
+    integer, intent(in) :: grid_coords(:,:)
+    integer, intent(in) :: grid_root(:,:,:)
+
+    integer :: coord(3), i, ierr
+
+    integer :: loc(ntasks), glob(ntasks)
+
+    call mpi_gather(local_rank, 1, MPI_INTEGER, loc(:), 1, MPI_INTEGER, 0, &
+                    & MPI_COMM_WORLD, ierr)
+    call mpi_gather(global_rank, 1, MPI_INTEGER, glob(:), 1, MPI_INTEGER, 0, &
+                    & MPI_COMM_WORLD, ierr)
+    if (rank == 0) then
+      write (*,*) ""
+      write (*,*) "Rank  local_rank  global_rank  color  grid_coords  grid_root"
+      write (*,*) "------------------------------------------------------------"
+      do i = 1, ntasks
+        coord = grid_coords(glob(i) + 1, :)
+        write (*, "(x,i4,x,i11,x,i12,x,i6,a,i2,x,i2,x,i2,a,x,i10)") &
+          & i - 1, loc(i), glob(i), color(i), &
+          & '    (', coord(1), coord(2), coord(3), ')  ', &
+          & grid_root(coord(1), coord(2), coord(3))
+      end do
+      write (*,*) ""
+    endif
+  end subroutine
+!**************************************************************************
+
 end module

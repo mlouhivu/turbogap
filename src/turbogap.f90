@@ -608,6 +608,10 @@ program turbogap
     call mpi_cart_shift(grid_comm, 2, 1, neighbor(5), neighbor(6), ierr)
     call get_grid_coords(grid_coords, grid_comm, global_ntasks)
     call get_grid_root(grid_root, grid_coords, global_ntasks, params%dd_grid)
+    if (params%dd_debug) then
+      call print_dd(rank, ntasks, local_rank, global_rank, color, &
+                    grid_coords, grid_root)
+    endif
   end if
 #endif
   call cpu_time(time_read_input(2))
