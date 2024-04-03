@@ -187,10 +187,11 @@ module decompose
     call projection(norm(2), surface(2,:), pos)
     call projection(norm(3), surface(3,:), pos)
 
+    cell = (/0, 0, 0/)
     do i = 1, 3
       do j = 1, grid(i)
-        if (borders(i, j-1) < norm(i) .and. norm(i) <= borders(i, j)) then
-          cell(i) = j
+        if (borders(i, j) < norm(i) .and. norm(i) <= borders(i, j + 1)) then
+          cell(i) = j - 1
         end if
       end do
     end do
@@ -295,7 +296,7 @@ module decompose
     step(:) = full(:) / grid(:)
 
     do i = 1,3
-      borders(i,0) = 0.0
+      borders(i,1) = 0.0
       borders(i,grid(i) + 1) = full(i)
       do j = 2, grid(i)
         borders(i,j) = step(i) * (j-1)
