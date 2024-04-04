@@ -158,12 +158,12 @@ module decompose
     real*8, intent(in) :: borders(:,:)
 
     integer :: i
-    integer :: cell(3)
+    integer :: cell(n_sites,3)
 
     allocate( placement(n_sites) )
+    call find_grid_cell(cell, positions, grid, surface, borders, n_sites)
     do i = 1, n_sites
-      call find_grid_cell(cell, positions(i,:), grid, surface, borders)
-      placement(i) = grid_root(cell(1), cell(2), cell(3))
+      placement(i) = grid_root(cell(i,1), cell(i,2), cell(i,3))
     end do
   end subroutine
 !**************************************************************************
@@ -171,28 +171,30 @@ module decompose
 
 
 !**************************************************************************
-  subroutine find_grid_cell(cell, pos, grid, surface, borders)
+  subroutine find_grid_cell(cell, positions, grid, surface, borders, n_sites)
     implicit none
 
-    integer, intent(out) :: cell(3)
-    real*8, intent(in) :: pos(3)
+    integer, intent(out) :: cell(n_sites,3)
+    real*8, intent(in) :: positions(n_sites,3)
     integer, intent(in) :: grid(3)
     real*8, intent(in) :: surface(3,3)
     real*8, intent(in) :: borders(:,:)
+    integer, intent(in) :: n_sites
 
-    real*8 :: norm(3)
-    integer :: i, j
+    real*8 :: norm(n_sites,3)
+    integer :: i, j, n
 
-    call projection(norm(1), surface(1,:), pos)
-    call projection(norm(2), surface(2,:), pos)
-    call projection(norm(3), surface(3,:), pos)
+    call vectorised_projection(norm, surface, positions, n_sites)
 
-    cell = (/0, 0, 0/)
-    do i = 1, 3
-      do j = 1, grid(i)
-        if (borders(i, j) < norm(i) .and. norm(i) <= borders(i, j + 1)) then
-          cell(i) = j - 1
-        end if
+    do n = 1, n_sites
+      do i = 1, 3
+        do j = 1, grid(i)
+          if (borders(i, j) < norm(n, i) &
+              & .and. norm(n, i) <= borders(i, j + 1)) then
+            cell(n, i) = j - 1
+            exit
+          end if
+        end do
       end do
     end do
   end subroutine
@@ -243,15 +245,17 @@ module decompose
   subroutine vectorised_projection(norm, s, v, n_sites)
     implicit none
 
-    real*8, intent(out) :: norm(n_sites)
-    real*8, intent(in) :: s(3)
+    real*8, intent(out) :: norm(n_sites,3)
+    real*8, intent(in) :: s(3,3)
     real*8, intent(in) :: v(n_sites,3)
     integer, intent(in) :: n_sites
 
-    integer :: i
+    integer :: i, j
 
     do i = 1, n_sites
-      norm(i) = sqrt(s(1) * v(i,1) + s(2) * v(i,2) + s(3) * v(i,3))
+      do j = 1, 3
+        norm(i,j) = sqrt(s(j,1) * v(i,1) + s(j,2) * v(i,2) + s(j,3) * v(i,3))
+      end do
     end do
   end subroutine
 !**************************************************************************
