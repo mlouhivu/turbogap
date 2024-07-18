@@ -175,7 +175,7 @@ module decompose
     implicit none
 
     integer, intent(out) :: cell(n_sites,3)
-    real*8, intent(in) :: positions(n_sites,3)
+    real*8, intent(in) :: positions(3,n_sites)
     integer, intent(in) :: grid(3)
     real*8, intent(in) :: surface(3,3)
     real*8, intent(in) :: borders(:,:)
@@ -247,14 +247,14 @@ module decompose
 
     real*8, intent(out) :: norm(n_sites,3)
     real*8, intent(in) :: s(3,3)
-    real*8, intent(in) :: v(n_sites,3)
+    real*8, intent(in) :: v(3,n_sites)
     integer, intent(in) :: n_sites
 
     integer :: i, j
 
     do i = 1, n_sites
       do j = 1, 3
-        norm(i,j) = sqrt(s(j,1) * v(i,1) + s(j,2) * v(i,2) + s(j,3) * v(i,3))
+        norm(i,j) = sqrt(s(j,1) * v(1,i) + s(j,2) * v(2,i) + s(j,3) * v(3,i))
       end do
     end do
   end subroutine
