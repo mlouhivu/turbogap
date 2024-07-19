@@ -146,6 +146,98 @@ module decompose
 
 
 !**************************************************************************
+  subroutine grid_coord2id(id, grid, coord)
+    implicit none
+    integer, intent(out) :: id
+    integer, intent(in) :: grid(3)
+    integer, intent(in) :: coord(3)
+
+    id = (coord(1) - 1) * grid(2) * grid(3) + &
+       & (coord(2) - 1) * grid(3) + coord(3)
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
+  subroutine grid_id2coord(coord, grid, id)
+    implicit none
+    integer, intent(out) :: coord(3)
+    integer, intent(in) :: grid(3)
+    integer, intent(in) :: id
+
+    integer tmp
+
+    coord(1) = id / (grid(2) * grid(3)) + 1
+    tmp = id - (coord(1) - 1) * grid(2) * grid(3)
+    coord(2) = tmp / grid(3) + 1
+    coord(3) = tmp - (coord(2) - 1) * grid(3) + 1
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
+  subroutine print_grid_coord(grid, id)
+    implicit none
+    integer, intent(in) :: grid(3)
+    integer, intent(in) :: id
+    integer :: coord(3)
+
+    call grid_id2coord(coord, grid, id)
+    write(*,"(a,i2,a,i2,x,i2,x,i2,a)") &
+      & "Grid ID ", id, " = (", coord(1), coord(2), coord(3), ")"
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
+  subroutine get_sort_order(order, keys, n, bins)
+    implicit none
+    integer, intent(out) :: order(n)
+    integer, intent(in) :: keys(n)
+    integer, intent(in) :: n
+    integer, intent(in) :: bins
+
+    integer :: slice(bins)
+    integer :: offset(bins)
+    integer :: tally(bins)
+    integer :: i, k
+
+    ! count number of keys in each bin
+    slice(:) = 0
+    do i = 1, n
+      k = keys(i) + 1
+      if (k > bins) then
+        write(*,*) "ERROR: key is larger than the number of bins"
+        stop
+      endif
+      slice(k) = slice(k) + 1
+    end do
+    ! calculate position of the first element in each bin
+    offset(:) = 1
+    do i = 2, bins
+      offset(i) = offset(i-1) + slice(i-1)
+    end do
+
+    ! sort indeces into bins based on the key values
+    order(:) = 0
+    tally(:) = 0
+    do i = 1, n
+      k = keys(i) + 1
+      if (.not. order(offset(k) + tally(k)) == 0) then
+        write(*,*) "WARN! already set.", k, i
+      endif
+      order(offset(k) + tally(k)) = i
+      tally(k) = tally(k) + 1
+    end do
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
   subroutine grid_placement(placement, grid, grid_root, n_sites, positions, &
                             surface, borders)
     implicit none

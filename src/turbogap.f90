@@ -80,6 +80,7 @@ program turbogap
        time_gap, time_soap(1:3), time_2b(1:3), time_3b(1:3), time_read_input(1:3), time_read_xyz(1:3), &
        time_mpi(1:3) = 0.d0, time_core_pot(1:3), time_vdw(1:3), instant_pressure, lv(1:3,1:3), &
        time_mpi_positions(1:3) = 0.d0, time_mpi_ef(1:3) = 0.d0, time_md(3) = 0.d0, &
+       time_grid_distribute(3) = 0.d0, &
        instant_pressure_tensor(1:3, 1:3), time_step, md_time, instant_pressure_prev
   integer, allocatable :: displs(:), displs2(:), counts(:), counts2(:)
   integer :: update_bar, n_sparse, idx, gd_istep = 0
@@ -150,7 +151,7 @@ program turbogap
   ! Domain decomposition
   real*8 :: cell(3:3), cell_origo(3)
   integer, allocatable :: color(:), grid_coords(:,:), grid_root(:,:,:), &
-                          placement(:)
+                          placement(:), sort_order(:)
   integer :: local_comm, global_comm, grid_comm
   integer :: local_rank, local_ntasks, global_rank, global_ntasks
   integer :: neighbor(6)
@@ -816,11 +817,22 @@ program turbogap
            end if
 
 #ifdef _MPIF90
+           ! precalculate surface vectors and initial domain borders
            call get_surface_vectors(grid_surface, a_box, b_box, c_box)
            call init_grid_borders(grid_borders, params%dd_grid, &
                                   a_box, b_box, c_box, grid_surface)
+           ! distribute sites to the domains
+           call cpu_time(time_grid_distribute(1))
            call grid_placement(placement, params%dd_grid, grid_root, n_sites, &
                                positions, grid_surface, grid_borders)
+           allocate(sort_order(n_sites))
+           call get_sort_order(sort_order, placement, n_sites, &
+             & params%dd_grid(1) * params%dd_grid(2) * params%dd_grid(3))
+           positions = positions(:,sort_order)
+           velocities = velocities(:,sort_order)
+           placement = placement(sort_order)
+           call cpu_time(time_grid_distribute(2))
+           time_grid_distribute(3) = time_grid_distribute(2) - time_grid_distribute(1)
 #endif
 
            ! call read_xyz(params%atoms_file, .true., params%all_atoms, params%do_timing, &
