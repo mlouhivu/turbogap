@@ -204,11 +204,15 @@ module decompose
     integer :: offset(bins)
     integer :: tally(bins)
     integer :: i, k
+    integer :: shift
+
+    ! shift key values, so that first index is always 1
+    shift = 1 - minval(keys)
 
     ! count number of keys in each bin
     slice(:) = 0
     do i = 1, n
-      k = keys(i) + 1
+      k = keys(i) + shift
       if (k > bins) then
         write(*,*) "ERROR: key is larger than the number of bins"
         stop
@@ -225,7 +229,7 @@ module decompose
     order(:) = 0
     tally(:) = 0
     do i = 1, n
-      k = keys(i) + 1
+      k = keys(i) + shift
       if (.not. order(offset(k) + tally(k)) == 0) then
         write(*,*) "WARN! already set.", k, i
       endif
