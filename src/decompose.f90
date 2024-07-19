@@ -111,14 +111,14 @@ module decompose
 !**************************************************************************
   subroutine get_grid_coords(grid_coords, grid_comm, ntasks)
     implicit none
-    integer, intent(out) :: grid_coords(:,:)
+    integer, intent(out) :: grid_coords(0:,:)
     integer, intent(in) :: grid_comm
     integer, intent(in) :: ntasks
 
     integer :: i, ierr
 
-    do i = 1, ntasks
-      call mpi_cart_coords(grid_comm, i - 1, 3, grid_coords(i,:), ierr)
+    do i = 0, ntasks - 1
+      call mpi_cart_coords(grid_comm, i, 3, grid_coords(i,:), ierr)
     end do
   end subroutine
 !**************************************************************************
@@ -128,17 +128,17 @@ module decompose
 !**************************************************************************
   subroutine get_grid_root(grid_root, grid_coords, ntasks)
     implicit none
-    integer, intent(out) :: grid_root(:,:,:)
-    integer, intent(in) :: grid_coords(:,:)
+    integer, intent(out) :: grid_root(0:,0:,0:)
+    integer, intent(in) :: grid_coords(0:,:)
     integer, intent(in) :: ntasks
 
     integer :: rank, i, j, k
 
-    do rank = 1, ntasks
+    do rank = 0, ntasks - 1
       i = grid_coords(rank, 1)
       j = grid_coords(rank, 2)
       k = grid_coords(rank, 3)
-      grid_root(i, j, k) = rank - 1
+      grid_root(i, j, k) = rank
     end do
   end subroutine
 !**************************************************************************
@@ -151,7 +151,7 @@ module decompose
     implicit none
     integer, intent(out), allocatable :: placement(:)
     integer, intent(in) :: grid(3)
-    integer, intent(in) :: grid_root(:,:,:)
+    integer, intent(in) :: grid_root(0:,0:,0:)
     integer, intent(in) :: n_sites
     real*8, intent(in) :: positions(:,:)
     real*8, intent(in) :: surface(3,3)
@@ -322,8 +322,8 @@ module decompose
     integer, intent(in) :: local_rank
     integer, intent(in) :: global_rank
     integer, intent(in) :: color(:)
-    integer, intent(in) :: grid_coords(:,:)
-    integer, intent(in) :: grid_root(:,:,:)
+    integer, intent(in) :: grid_coords(0:,:)
+    integer, intent(in) :: grid_root(0:,0:,0:)
 
     integer :: coord(3), i, ierr
 
@@ -338,7 +338,7 @@ module decompose
       write (*,*) "Rank  local_rank  global_rank  color  grid_coords  grid_root"
       write (*,*) "------------------------------------------------------------"
       do i = 1, ntasks
-        coord = grid_coords(glob(i) + 1, :)
+        coord = grid_coords(glob(i), :)
         write (*, "(x,i4,x,i11,x,i12,x,i6,a,i2,x,i2,x,i2,a,x,i10)") &
           & i - 1, loc(i), glob(i), color(i), &
           & '    (', coord(1), coord(2), coord(3), ')  ', &
