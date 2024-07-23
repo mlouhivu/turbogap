@@ -350,7 +350,7 @@ module decompose
 
     do i = 1, n_sites
       do j = 1, 3
-        norm(i,j) = sqrt(s(j,1) * v(1,i) + s(j,2) * v(2,i) + s(j,3) * v(3,i))
+        norm(i,j) = s(j,1) * v(1,i) + s(j,2) * v(2,i) + s(j,3) * v(3,i)
       end do
     end do
   end subroutine
@@ -366,7 +366,7 @@ module decompose
     real*8, intent(in) :: s(3)
     real*8, intent(in) :: v(3)
 
-    norm = sqrt(s(1) * v(1) + s(2) * v(2) + s(3) * v(3))
+    norm = s(1) * v(1) + s(2) * v(2) + s(3) * v(3)
   end subroutine
 !**************************************************************************
 
