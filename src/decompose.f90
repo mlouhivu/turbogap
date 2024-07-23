@@ -445,4 +445,72 @@ module decompose
   end subroutine
 !**************************************************************************
 
+
+
+!**************************************************************************
+  subroutine prepare_grid_distribute(n, placement, elements, grid_size, &
+                                     counts, displs)
+    implicit none
+
+    integer, intent(in) :: n
+    integer, intent(in) :: placement(:)
+    integer, intent(in) :: elements
+    integer, intent(in) :: grid_size
+    integer, intent(out), allocatable :: counts(:)
+    integer, intent(out), allocatable :: displs(:)
+
+    integer :: i, rank
+    integer :: j = 1
+
+    if (allocated(counts)) then
+      deallocate(counts)
+    endif
+    if (allocated(displs)) then
+      deallocate(displs)
+    endif
+    allocate(counts(grid_size))
+    allocate(displs(grid_size))
+
+    counts(:) = 0
+    displs(:) = 0
+
+    rank = 0
+    do i = 1, size(placement)
+    !do i = 1, n
+      if (placement(i) /= rank) then
+        j = j + 1
+        rank = placement(i)
+      endif
+      counts(j) = counts(j) + 1
+    end do
+    do i = 2, grid_size
+      displs(i) = displs(i - 1) + counts(i - 1) * elements
+    end do
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
+  subroutine grid_distribute(sendbuf, recvbuf, counts, displs, grid_comm)
+    use mpi
+    implicit none
+
+    real*8, intent(in) :: sendbuf(:,:)
+    real*8 :: recvbuf(:,:)
+    integer, intent(in) :: counts(:)
+    integer, intent(in) :: displs(:)
+    integer, intent(in) :: grid_comm
+
+    integer :: recvcount
+    integer :: ierr
+
+    recvcount = size(recvbuf)
+
+    call mpi_scatterv(sendbuf, counts, displs, MPI_DOUBLE_PRECISION, &
+                      recvbuf, recvcount, MPI_DOUBLE_PRECISION, &
+                      0, grid_comm, ierr)
+  end subroutine
+!**************************************************************************
+
 end module

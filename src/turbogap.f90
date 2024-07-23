@@ -152,12 +152,14 @@ program turbogap
   real*8 :: cell(3:3), cell_origo(3)
   integer, allocatable :: color(:), grid_coords(:,:), grid_root(:,:,:), &
                           placement(:), sort_order(:)
+  real*8, allocatable :: buffer_positions(:,:), buffer_velocities(:,:)
   integer :: local_comm, global_comm, grid_comm
   integer :: local_rank, local_ntasks, global_rank, global_ntasks
   integer :: neighbor(6)
   logical :: grid_periodic(3) = (/ .true., .true., .true. /)
   real*8, allocatable :: grid_borders(:,:)
   real*8 :: grid_surface(3,3)
+  integer, allocatable :: distribute_counts(:), distribute_displs(:)
 
   ! Nested sampling
   real*8 :: e_max, e_kin, rand, rand_scale(1:6)
@@ -831,6 +833,16 @@ program turbogap
            positions = positions(:,sort_order)
            velocities = velocities(:,sort_order)
            placement = placement(sort_order)
+           allocate(buffer_positions(3, n_sites))
+           allocate(buffer_velocities(3, n_sites))
+           call prepare_grid_distribute(n_sites, placement, 3, global_ntasks, &
+                                        distribute_counts, distribute_displs)
+           call grid_distribute(positions, buffer_positions, &
+                                distribute_counts, distribute_displs, &
+                                grid_comm)
+           call grid_distribute(velocities, buffer_velocities, &
+                                distribute_counts, distribute_displs, &
+                                grid_comm)
            call cpu_time(time_grid_distribute(2))
            time_grid_distribute(3) = time_grid_distribute(2) - time_grid_distribute(1)
 #endif
