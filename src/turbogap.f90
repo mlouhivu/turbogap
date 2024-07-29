@@ -158,6 +158,7 @@ program turbogap
   integer :: neighbor(6)
   logical :: grid_periodic(3) = (/ .true., .true., .true. /)
   real*8, allocatable :: grid_borders(:,:)
+  integer :: grid_borders_size
   real*8 :: grid_surface(3,3)
   integer, allocatable :: distribute_counts(:), distribute_displs(:)
 
@@ -819,32 +820,63 @@ program turbogap
            end if
 
 #ifdef _MPIF90
+        END IF
+        if (local_rank == 0) then
            ! precalculate surface vectors and initial domain borders
-           call get_surface_vectors(grid_surface, a_box, b_box, c_box)
-           call init_grid_borders(grid_borders, params%dd_grid, &
-                                  a_box, b_box, c_box, grid_surface)
+           call allocate_grid_borders(grid_borders, grid_borders_size, &
+                                      params%dd_grid)
+           if (global_rank == 0) then
+              call get_surface_vectors(grid_surface, a_box, b_box, c_box)
+              call init_grid_borders(grid_borders, params%dd_grid, &
+                                     a_box, b_box, c_box, grid_surface)
+           end if
+           call mpi_bcast(grid_surface, 9, MPI_DOUBLE_PRECISION, &
+                          0, grid_comm, ierr)
+           call mpi_bcast(grid_borders, grid_borders_size, MPI_DOUBLE_PRECISION, &
+                          0, grid_comm, ierr)
+           ! reorder positions and velocities based on domain placement
+           if (global_rank == 0) then
+              call cpu_time(time_grid_distribute(1))
+              call grid_placement(placement, params%dd_grid, grid_root, n_sites, &
+                                  positions, grid_surface, grid_borders)
+              allocate(sort_order(n_sites))
+              call get_sort_order(sort_order, placement, n_sites, &
+                                  params%dd_grid(1) * params%dd_grid(2) &
+                                  * params%dd_grid(3))
+              positions = positions(:,sort_order)
+              velocities = velocities(:,sort_order)
+              placement = placement(sort_order)
+           end if
            ! distribute sites to the domains
-           call cpu_time(time_grid_distribute(1))
-           call grid_placement(placement, params%dd_grid, grid_root, n_sites, &
-                               positions, grid_surface, grid_borders)
-           allocate(sort_order(n_sites))
-           call get_sort_order(sort_order, placement, n_sites, &
-             & params%dd_grid(1) * params%dd_grid(2) * params%dd_grid(3))
-           positions = positions(:,sort_order)
-           velocities = velocities(:,sort_order)
-           placement = placement(sort_order)
+           allocate(distribute_counts(global_ntasks))
+           allocate(distribute_displs(global_ntasks))
+           if (global_rank == 0) then
+              call prepare_grid_distribute(n_sites, placement, 3, global_ntasks, &
+                                           distribute_counts, distribute_displs)
+           end if
+           call mpi_bcast(distribute_counts, global_ntasks, MPI_INTEGER, &
+                          0, grid_comm, ierr)
+           call mpi_bcast(distribute_displs, global_ntasks, MPI_INTEGER, &
+                          0, grid_comm, ierr)
+           call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, grid_comm, ierr)
            allocate(buffer_positions(3, n_sites))
            allocate(buffer_velocities(3, n_sites))
-           call prepare_grid_distribute(n_sites, placement, 3, global_ntasks, &
-                                        distribute_counts, distribute_displs)
            call grid_distribute(positions, buffer_positions, &
                                 distribute_counts, distribute_displs, &
-                                grid_comm)
+                                grid_comm, global_rank)
            call grid_distribute(velocities, buffer_velocities, &
                                 distribute_counts, distribute_displs, &
                                 grid_comm)
-           call cpu_time(time_grid_distribute(2))
-           time_grid_distribute(3) = time_grid_distribute(2) - time_grid_distribute(1)
+           if (global_rank == 0) then
+              call cpu_time(time_grid_distribute(2))
+              time_grid_distribute(3) = time_grid_distribute(2) &
+                                      - time_grid_distribute(1)
+              if (params%dd_debug) then
+                write(*,*) "time(grid_distribute):", time_grid_distribute(3)
+              end if
+           end if
+        end if
+        IF( rank == 0 )THEN
 #endif
 
            ! call read_xyz(params%atoms_file, .true., params%all_atoms, params%do_timing, &
