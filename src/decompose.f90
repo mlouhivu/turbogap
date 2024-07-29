@@ -373,10 +373,28 @@ module decompose
 
 
 !**************************************************************************
-  subroutine init_grid_borders(borders, grid, a_box, b_box, c_box, surface)
+  subroutine allocate_grid_borders(borders, borders_size, grid)
     implicit none
 
     real*8, intent(out), allocatable :: borders(:,:)
+    integer, intent(out) :: borders_size
+    integer, intent(in) :: grid(3)
+
+    integer :: m
+
+    m = maxval(grid)
+    allocate(borders(3, m + 1))
+    borders_size = (m + 1) * 3
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
+  subroutine init_grid_borders(borders, grid, a_box, b_box, c_box, surface)
+    implicit none
+
+    real*8, intent(out) :: borders(:,:)
     integer, intent(in) :: grid(3)
     real*8, intent(in) :: a_box(3)
     real*8, intent(in) :: b_box(3)
@@ -384,10 +402,7 @@ module decompose
     real*8, intent(in) :: surface(3,3)
 
     real*8 :: full(3), step(3)
-    integer :: i, j, m
-
-    m = maxval(grid)
-    allocate(borders(3, m + 1))
+    integer :: i, j
 
     call projection(full(1), surface(1,:), a_box)
     call projection(full(2), surface(2,:), b_box)
@@ -456,35 +471,26 @@ module decompose
     integer, intent(in) :: placement(:)
     integer, intent(in) :: elements
     integer, intent(in) :: grid_size
-    integer, intent(out), allocatable :: counts(:)
-    integer, intent(out), allocatable :: displs(:)
+    integer, intent(out) :: counts(:)
+    integer, intent(out) :: displs(:)
 
     integer :: i, rank
     integer :: j = 1
-
-    if (allocated(counts)) then
-      deallocate(counts)
-    endif
-    if (allocated(displs)) then
-      deallocate(displs)
-    endif
-    allocate(counts(grid_size))
-    allocate(displs(grid_size))
 
     counts(:) = 0
     displs(:) = 0
 
     rank = 0
     do i = 1, size(placement)
-    !do i = 1, n
       if (placement(i) /= rank) then
         j = j + 1
         rank = placement(i)
       endif
       counts(j) = counts(j) + 1
     end do
+    counts(:) = counts(:) * elements
     do i = 2, grid_size
-      displs(i) = displs(i - 1) + counts(i - 1) * elements
+      displs(i) = displs(i - 1) + counts(i - 1)
     end do
   end subroutine
 !**************************************************************************
