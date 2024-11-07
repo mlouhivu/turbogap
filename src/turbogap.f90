@@ -866,7 +866,7 @@ program turbogap
                                 grid_comm, global_rank)
            call grid_distribute(velocities, buffer_velocities, &
                                 distribute_counts, distribute_displs, &
-                                grid_comm)
+                                grid_comm, global_rank)
            if (global_rank == 0) then
               call cpu_time(time_grid_distribute(2))
               time_grid_distribute(3) = time_grid_distribute(2) &
