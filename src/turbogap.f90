@@ -875,7 +875,9 @@ program turbogap
                 write(*,*) "time(grid_distribute):", time_grid_distribute(3)
               end if
            end if
+           n_sites_local = distribute_counts(global_rank)
         end if
+        call mpi_bcast(n_sites_local, 1, MPI_INTEGER, 0, grid_comm, ierr)
         IF( rank == 0 )THEN
 #endif
 
