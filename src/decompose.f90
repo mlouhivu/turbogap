@@ -498,15 +498,16 @@ module decompose
 
 
 !**************************************************************************
-  subroutine grid_distribute(sendbuf, recvbuf, counts, displs, grid_comm, &
-                             rank)
+  subroutine grid_distribute(sendbuf, recvbuf, counts, displs, datatype, &
+                             grid_comm, rank)
     use mpi
     implicit none
 
-    real*8, intent(in) :: sendbuf(:,:)
-    real*8 :: recvbuf(:,:)
+    type(*), intent(in) :: sendbuf(..)
+    type(*) :: recvbuf(..)
     integer, intent(in) :: counts(:)
     integer, intent(in) :: displs(:)
+    integer, intent(in) :: datatype
     integer, intent(in) :: grid_comm
     integer, intent(in) :: rank
 
@@ -514,8 +515,8 @@ module decompose
     integer :: ierr
 
     n = counts(rank + 1)
-    call mpi_scatterv(sendbuf, counts, displs, MPI_DOUBLE_PRECISION, &
-                      recvbuf, n, MPI_DOUBLE_PRECISION, &
+    call mpi_scatterv(sendbuf, counts, displs, datatype, &
+                      recvbuf, n, datatype, &
                       0, grid_comm, ierr)
   end subroutine
 !**************************************************************************
