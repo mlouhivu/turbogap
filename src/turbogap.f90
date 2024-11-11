@@ -80,7 +80,8 @@ program turbogap
        time_gap, time_soap(1:3), time_2b(1:3), time_3b(1:3), time_read_input(1:3), time_read_xyz(1:3), &
        time_mpi(1:3) = 0.d0, time_core_pot(1:3), time_vdw(1:3), instant_pressure, lv(1:3,1:3), &
        time_mpi_positions(1:3) = 0.d0, time_mpi_ef(1:3) = 0.d0, time_md(3) = 0.d0, &
-       time_grid_distribute(3) = 0.d0, &
+       time_grid_prepare(3) = 0.d0, time_grid_distribute(3) = 0.d0, &
+       time_grid_local(3) = 0.d0, &
        instant_pressure_tensor(1:3, 1:3), time_step, md_time, instant_pressure_prev
   integer, allocatable :: displs(:), displs2(:), counts(:), counts2(:)
   integer :: update_bar, n_sparse, idx, gd_istep = 0
@@ -153,6 +154,12 @@ program turbogap
   integer, allocatable :: color(:), grid_coords(:,:), grid_root(:,:,:), &
                           placement(:), sort_order(:)
   real*8, allocatable :: buffer_positions(:,:), buffer_velocities(:,:)
+  real*8, allocatable :: global_positions(:,:), global_velocities(:,:), &
+                         global_masses(:)
+  integer, allocatable :: global_species(:), global_species_supercell(:)
+  logical, allocatable :: global_fix_atom(:,:)
+  character*8, allocatable :: global_xyz_species(:), &
+                              global_xyz_species_supercell(:)
   integer :: local_comm, global_comm, grid_comm
   integer :: local_rank, local_ntasks, global_rank, global_ntasks
   integer :: neighbor(6)
@@ -819,68 +826,6 @@ program turbogap
 
            end if
 
-#ifdef _MPIF90
-        END IF
-        if (local_rank == 0) then
-           ! precalculate surface vectors and initial domain borders
-           call allocate_grid_borders(grid_borders, grid_borders_size, &
-                                      params%dd_grid)
-           if (global_rank == 0) then
-              call get_surface_vectors(grid_surface, a_box, b_box, c_box)
-              call init_grid_borders(grid_borders, params%dd_grid, &
-                                     a_box, b_box, c_box, grid_surface)
-           end if
-           call mpi_bcast(grid_surface, 9, MPI_DOUBLE_PRECISION, &
-                          0, grid_comm, ierr)
-           call mpi_bcast(grid_borders, grid_borders_size, MPI_DOUBLE_PRECISION, &
-                          0, grid_comm, ierr)
-           ! reorder positions and velocities based on domain placement
-           if (global_rank == 0) then
-              call cpu_time(time_grid_distribute(1))
-              call grid_placement(placement, params%dd_grid, grid_root, n_sites, &
-                                  positions, grid_surface, grid_borders)
-              allocate(sort_order(n_sites))
-              call get_sort_order(sort_order, placement, n_sites, &
-                                  params%dd_grid(1) * params%dd_grid(2) &
-                                  * params%dd_grid(3))
-              positions = positions(:,sort_order)
-              velocities = velocities(:,sort_order)
-              placement = placement(sort_order)
-           end if
-           ! distribute sites to the domains
-           allocate(distribute_counts(global_ntasks))
-           allocate(distribute_displs(global_ntasks))
-           if (global_rank == 0) then
-              call prepare_grid_distribute(n_sites, placement, 3, global_ntasks, &
-                                           distribute_counts, distribute_displs)
-           end if
-           call mpi_bcast(distribute_counts, global_ntasks, MPI_INTEGER, &
-                          0, grid_comm, ierr)
-           call mpi_bcast(distribute_displs, global_ntasks, MPI_INTEGER, &
-                          0, grid_comm, ierr)
-           call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, grid_comm, ierr)
-           allocate(buffer_positions(3, n_sites))
-           allocate(buffer_velocities(3, n_sites))
-           call grid_distribute(positions, buffer_positions, &
-                                distribute_counts, distribute_displs, &
-                                grid_comm, global_rank)
-           call grid_distribute(velocities, buffer_velocities, &
-                                distribute_counts, distribute_displs, &
-                                grid_comm, global_rank)
-           if (global_rank == 0) then
-              call cpu_time(time_grid_distribute(2))
-              time_grid_distribute(3) = time_grid_distribute(2) &
-                                      - time_grid_distribute(1)
-              if (params%dd_debug) then
-                write(*,*) "time(grid_distribute):", time_grid_distribute(3)
-              end if
-           end if
-           n_sites_local = distribute_counts(global_rank)
-        end if
-        call mpi_bcast(n_sites_local, 1, MPI_INTEGER, 0, grid_comm, ierr)
-        IF( rank == 0 )THEN
-#endif
-
            ! call read_xyz(params%atoms_file, .true., params%all_atoms, params%do_timing, &
            !               n_species, params%species_types, repeat_xyz, rcut_max, params%which_atom, &
            !               positions, params%do_md, velocities, params%masses_types, masses, xyz_species, &
@@ -939,6 +884,7 @@ program turbogap
                    n_sites, .false., fix_atom, params%t_beg, params%write_array_property(6), &
                    .false. )
            end if
+           ! NOTE: FILE IS READ HERE!!!
 #ifdef _MPIF90
         END IF
 #endif
@@ -980,57 +926,207 @@ program turbogap
               E_kinetic = E_kinetic * params%t_beg/instant_temp
            end if
         end if
-
      END IF
-     call cpu_time(time_mpi(1))
-     call mpi_bcast(n_pos, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
-     call mpi_bcast(n_sp, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
-     call mpi_bcast(n_sp_sc, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
-     call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
-     call cpu_time(time_mpi(2))
-     time_mpi(3) = time_mpi(3) + time_mpi(2) - time_mpi(1)
 
-     IF( rank /= 0 )THEN
-        if(allocated(positions))deallocate(positions)
-        allocate( positions(1:3, n_pos) )
-        if( params%do_md .or. params%do_nested_sampling .or. params%do_mc )then
-           if(allocated(velocities))deallocate(velocities)
-           allocate( velocities(1:3, n_sp) )
-           !      allocate( masses(n_pos) )
-           if(allocated( masses ))deallocate( masses )
-           allocate( masses(1:n_sp) )
-           ! if(allocated( fix_atom ))deallocate( fix_atom )
-           ! allocate( fix_atom(1:3, 1:n_sp) )
+     if (params%do_dd .and. md_istep == 0) then
+        if (local_rank == 0) then
+           if (global_rank == 0) then
+              call cpu_time(time_grid_prepare(1))
+           end if
+           ! precalculate surface vectors and initial domain borders
+           call allocate_grid_borders(grid_borders, grid_borders_size, &
+                                      params%dd_grid)
+           if (global_rank == 0) then
+              call get_surface_vectors(grid_surface, a_box, b_box, c_box)
+              call init_grid_borders(grid_borders, params%dd_grid, &
+                                     a_box, b_box, c_box, grid_surface)
+           end if
+           call mpi_bcast(grid_surface, 9, MPI_DOUBLE_PRECISION, &
+                          0, grid_comm, ierr)
+           call mpi_bcast(grid_borders, grid_borders_size, MPI_DOUBLE_PRECISION, &
+                          0, grid_comm, ierr)
+           ! reorder positions and velocities based on domain placement
+           if (global_rank == 0) then
+              call grid_placement(placement, params%dd_grid, grid_root, n_sites, &
+                                  positions, grid_surface, grid_borders)
+              ! FIXME: assumes that n_sites == n_pos == n_sp == n_sp_sc
+              !        if not true, sorting needs to be adjusted
+              allocate(sort_order(n_sites))
+              call get_sort_order(sort_order, placement, n_sites, &
+                                  params%dd_grid(1) * params%dd_grid(2) &
+                                  * params%dd_grid(3))
+              allocate(global_positions(1:3, n_pos))
+              allocate(global_velocities(1:3, n_sp))
+              allocate(global_masses(n_sp))
+              allocate(global_species(n_sp))
+              allocate(global_xyz_species(n_sp))
+              allocate(global_species_supercell(n_sp_sc))
+              allocate(global_xyz_species_supercell(n_sp_sc))
+              allocate(global_fix_atom(1:3, n_sp))
+              placement = placement(sort_order)
+              global_positions = positions(:,sort_order)
+              global_velocities = velocities(:,sort_order)
+              global_masses = masses(sort_order)
+              global_xyz_species = xyz_species(sort_order)
+              global_species = species(sort_order)
+              global_xyz_species_supercell = xyz_species_supercell(sort_order)
+              global_species_supercell = species_supercell(sort_order)
+              global_fix_atom = fix_atom(:,sort_order)
+           end if
+           ! prepare to distribute sites
+           allocate(distribute_counts(global_ntasks))
+           allocate(distribute_displs(global_ntasks))
+           if (global_rank == 0) then
+              call prepare_grid_distribute(n_sites, placement, 1, global_ntasks, &
+                                           distribute_counts, distribute_displs)
+           end if
+           call mpi_bcast(distribute_counts, global_ntasks, MPI_INTEGER, &
+                          0, grid_comm, ierr)
+           call mpi_bcast(distribute_displs, global_ntasks, MPI_INTEGER, &
+                          0, grid_comm, ierr)
+           call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, grid_comm, ierr)
+           if (global_rank == 0) then
+              call cpu_time(time_grid_prepare(2))
+              time_grid_prepare(3) = time_grid_prepare(2) &
+                                   - time_grid_prepare(1)
+              if (params%dd_debug) then
+                write(*,*) "time(grid_prepare):", time_grid_prepare(3)
+              end if
+           end if
+           n_sites_local = distribute_counts(global_rank + 1)
         end if
-        if(allocated( xyz_species ))deallocate( xyz_species )
-        allocate( xyz_species(1:n_sp) )
-        if(allocated( species ))deallocate( species )
-        allocate( species(1:n_sp) )
-        if(allocated( xyz_species_supercell ))deallocate( xyz_species_supercell )
-        allocate( xyz_species_supercell(1:n_sp_sc) )
-        if(allocated( species_supercell ))deallocate( species_supercell )
-        allocate( species_supercell(1:n_sp_sc) )
-        if(allocated( fix_atom ))deallocate( fix_atom )
-        allocate( fix_atom(1:3,1:n_sp) )
-
-     END IF
-     call cpu_time(time_mpi_positions(1))
-     call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-     if( params%do_md .or. params%do_nested_sampling .or. params%do_mc .or. params%mc_hamiltonian)then
-        call mpi_bcast(velocities, 3*n_sp, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call mpi_bcast(masses, n_sp, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-        call mpi_bcast(fix_atom, 3*n_sp, MPI_LOGICAL, 0, MPI_COMM_WORLD, ierr)
+        ! FIXME: either allow different values or use just one variable
+        call mpi_bcast(n_sites_local, 1, MPI_INTEGER, 0, local_comm, ierr)
+        n_pos = n_sites_local
+        n_sp = n_sites_local
+        n_sp_sc = n_sites_local
+        ! FIXME: lazy swap... variables should be renamed
+        n_sites_local = n_sites ! really n_sites_global
+        n_sites = n_pos
+     else if (params%do_dd .and. md_istep /= 0) then
+       ! migrate out-of-cell sites between domains
+       ! reallocate arrays
+     else
+        call cpu_time(time_mpi(1))
+        call mpi_bcast(n_pos, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+        call mpi_bcast(n_sp, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+        call mpi_bcast(n_sp_sc, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+        call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+        call cpu_time(time_mpi(2))
+        time_mpi(3) = time_mpi(3) + time_mpi(2) - time_mpi(1)
      end if
-     call mpi_bcast(xyz_species, 8*n_sp, MPI_CHARACTER, 0, MPI_COMM_WORLD, ierr)
-     call mpi_bcast(xyz_species_supercell, 8*n_sp_sc, MPI_CHARACTER, 0, MPI_COMM_WORLD, ierr)
-     call mpi_bcast(species, n_sp, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
-     call mpi_bcast(species_supercell, n_sp_sc, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
-     call mpi_bcast(indices, 3, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
-     call mpi_bcast(a_box, 3, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-     call mpi_bcast(b_box, 3, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-     call mpi_bcast(c_box, 3, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-     call cpu_time(time_mpi_positions(2))
-     time_mpi_positions(3) = time_mpi_positions(3) + time_mpi_positions(2) - time_mpi_positions(1)
+
+     if(allocated(positions))deallocate(positions)
+     allocate( positions(1:3, n_pos) )
+     if( params%do_md .or. params%do_nested_sampling .or. params%do_mc )then
+        if(allocated(velocities))deallocate(velocities)
+        allocate( velocities(1:3, n_sp) )
+        !      allocate( masses(n_pos) )
+        if(allocated( masses ))deallocate( masses )
+        allocate( masses(1:n_sp) )
+        ! if(allocated( fix_atom ))deallocate( fix_atom )
+        ! allocate( fix_atom(1:3, 1:n_sp) )
+     end if
+     if(allocated( xyz_species ))deallocate( xyz_species )
+     allocate( xyz_species(1:n_sp) )
+     if(allocated( species ))deallocate( species )
+     allocate( species(1:n_sp) )
+     if(allocated( xyz_species_supercell ))deallocate( xyz_species_supercell )
+     allocate( xyz_species_supercell(1:n_sp_sc) )
+     if(allocated( species_supercell ))deallocate( species_supercell )
+     allocate( species_supercell(1:n_sp_sc) )
+     if(allocated( fix_atom ))deallocate( fix_atom )
+     allocate( fix_atom(1:3,1:n_sp) )
+
+     if (params%do_dd) then
+        if (md_istep == 0) then
+           if (local_rank == 0) then
+              ! distribute sites to the domains
+              if (global_rank == 0) then
+                 call cpu_time(time_grid_distribute(1))
+              end if
+              call grid_distribute(global_masses, masses, &
+                                   distribute_counts, distribute_displs, &
+                                   MPI_DOUBLE_PRECISION, grid_comm, global_rank)
+              call grid_distribute(global_species, species, &
+                                   distribute_counts, distribute_displs, &
+                                   MPI_INTEGER, grid_comm, global_rank)
+              call grid_distribute(global_species_supercell, species_supercell, &
+                                   distribute_counts, distribute_displs, &
+                                   MPI_INTEGER, grid_comm, global_rank)
+              call grid_distribute(global_positions, positions, &
+                                   distribute_counts * 3, distribute_displs * 3, &
+                                   MPI_DOUBLE_PRECISION, grid_comm, global_rank)
+              call grid_distribute(global_velocities, velocities, &
+                                   distribute_counts * 3, distribute_displs * 3, &
+                                   MPI_DOUBLE_PRECISION, grid_comm, global_rank)
+              call grid_distribute(global_fix_atom, fix_atom, &
+                                   distribute_counts * 3, distribute_displs * 3, &
+                                   MPI_LOGICAL, grid_comm, global_rank)
+              call grid_distribute(global_xyz_species, xyz_species, &
+                                   distribute_counts * 8, distribute_displs * 8, &
+                                   MPI_CHARACTER, grid_comm, global_rank)
+              call grid_distribute(global_xyz_species_supercell, xyz_species_supercell, &
+                                   distribute_counts * 8, distribute_displs * 8, &
+                                   MPI_CHARACTER, grid_comm, global_rank)
+              if (global_rank == 0) then
+                 call cpu_time(time_grid_distribute(2))
+                 time_grid_distribute(3) = time_grid_distribute(2) &
+                                         - time_grid_distribute(1)
+                 if (params%dd_debug) then
+                   write(*,*) "time(grid_distribute):", time_grid_distribute(3)
+                 end if
+              end if
+           end if
+           ! domain local
+           call cpu_time(time_grid_local(1))
+           call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+           call mpi_bcast(velocities, 3*n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+           call mpi_bcast(masses, n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+           call mpi_bcast(fix_atom, 3*n_sp, MPI_LOGICAL, 0, local_comm, ierr)
+           call mpi_bcast(xyz_species, 8*n_sp, MPI_CHARACTER, 0, local_comm, ierr)
+           call mpi_bcast(xyz_species_supercell, 8*n_sp_sc, MPI_CHARACTER, 0, local_comm, ierr)
+           call mpi_bcast(species, n_sp, MPI_INTEGER, 0, local_comm, ierr)
+           call mpi_bcast(species_supercell, n_sp_sc, MPI_INTEGER, 0, local_comm, ierr)
+           call cpu_time(time_grid_local(2))
+           time_grid_local(3) = time_grid_local(3) &
+                              + time_grid_local(2) - time_grid_local(1)
+           ! global
+           call cpu_time(time_mpi_positions(1))
+           call mpi_bcast(indices, 3, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+           call mpi_bcast(a_box, 3, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+           call mpi_bcast(b_box, 3, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+           call mpi_bcast(c_box, 3, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+           call cpu_time(time_mpi_positions(2))
+           time_mpi_positions(3) = time_mpi_positions(3) &
+                                 + time_mpi_positions(2) - time_mpi_positions(1)
+           if (local_rank == 0 .and. global_rank == 0) then
+              if (params%dd_debug) then
+                 write(*,*) "time(grid_local):", time_grid_local(3)
+              end if
+           end if
+        else
+          ! ??
+        end if
+     else
+        call cpu_time(time_mpi_positions(1))
+        call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+        if( params%do_md .or. params%do_nested_sampling .or. params%do_mc .or. params%mc_hamiltonian)then
+           call mpi_bcast(velocities, 3*n_sp, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+           call mpi_bcast(masses, n_sp, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+           call mpi_bcast(fix_atom, 3*n_sp, MPI_LOGICAL, 0, MPI_COMM_WORLD, ierr)
+        end if
+        call mpi_bcast(xyz_species, 8*n_sp, MPI_CHARACTER, 0, MPI_COMM_WORLD, ierr)
+        call mpi_bcast(xyz_species_supercell, 8*n_sp_sc, MPI_CHARACTER, 0, MPI_COMM_WORLD, ierr)
+        call mpi_bcast(species, n_sp, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+        call mpi_bcast(species_supercell, n_sp_sc, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+        call mpi_bcast(indices, 3, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+        call mpi_bcast(a_box, 3, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+        call mpi_bcast(b_box, 3, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+        call mpi_bcast(c_box, 3, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+        call cpu_time(time_mpi_positions(2))
+        time_mpi_positions(3) = time_mpi_positions(3) + time_mpi_positions(2) - time_mpi_positions(1)
+     end if
 #endif
      !   Now that all ranks know the size of n_sites, we allocate do_list
      if( .not. params%do_md .or. (params%do_md .and. md_istep == 0) .or. &
@@ -1069,6 +1165,7 @@ program turbogap
              .false.)
 
      end if
+     ! NOTE: ARRAYS MAY HAVE CHANGED HERE
 
 #ifdef _MPIF90
      !   Overlapping domain decomposition with subcommunicators goes here <------------------- TO DO
