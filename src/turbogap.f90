@@ -164,6 +164,7 @@ program turbogap
   integer :: local_rank, local_ntasks, global_rank, global_ntasks
   integer :: neighbor(6)
   logical :: grid_periodic(3) = (/ .true., .true., .true. /)
+  integer :: grid_dims
   real*8, allocatable :: grid_borders(:,:)
   integer :: grid_borders_size
   real*8 :: grid_surface(3,3)
@@ -606,6 +607,7 @@ program turbogap
   if (params%do_md) then
     call check_grid(params%dd_grid, params%dd_grid_affinity)
     call grid_affinity(color, params%dd_grid, params%dd_grid_affinity, ntasks)
+    call grid_dimensions(params%dd_grid, grid_dims)
     call mpi_comm_split(MPI_COMM_WORLD, color(rank + 1), rank, local_comm, ierr)
     call mpi_comm_size(local_comm, local_ntasks, ierr)
     call mpi_comm_rank(local_comm, local_rank, ierr)
@@ -630,7 +632,7 @@ program turbogap
                    MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
     if (params%dd_debug) then
       call print_grid(rank, ntasks, local_rank, global_rank, color, &
-                      grid_coords, grid_root)
+                      params%dd_grid, grid_dims, grid_coords, grid_root)
     endif
   end if
 #endif

@@ -109,6 +109,25 @@ module decompose
 
 
 !**************************************************************************
+  subroutine grid_dimensions(grid, dims)
+    implicit none
+    integer, intent(in) :: grid(3)
+    integer, intent(out) :: dims
+
+    integer :: i
+
+    dims = 0
+    do i = 1, 3
+       if (grid(i) > 1) then
+          dims = dims + 1
+       end if
+    end do
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
   subroutine get_grid_coords(grid_coords, grid_comm, ntasks)
     implicit none
     integer, intent(out) :: grid_coords(0:,:)
@@ -424,7 +443,7 @@ module decompose
 
 !**************************************************************************
   subroutine print_grid(rank, ntasks, local_rank, global_rank, color, &
-                        grid_coords, grid_root)
+                        grid, grid_dims, grid_coords, grid_root)
     use mpi
     implicit none
 
@@ -433,6 +452,8 @@ module decompose
     integer, intent(in) :: local_rank
     integer, intent(in) :: global_rank
     integer, intent(in) :: color(:)
+    integer, intent(in) :: grid(3)
+    integer, intent(in) :: grid_dims
     integer, intent(in) :: grid_coords(0:,:)
     integer, intent(in) :: grid_root(0:,0:,0:)
 
@@ -446,11 +467,14 @@ module decompose
                     & MPI_COMM_WORLD, ierr)
     if (rank == 0) then
       write (*,*) ""
+      write (*, "(i0,a,i0,a,i0,a,i0)") &
+        grid_dims, 'D grid: ', grid(1), ' x ', grid(2), ' x ', grid(3)
+      write (*,*) ""
       write (*,*) "Rank  local_rank  global_rank  color  grid_coords  grid_root"
       write (*,*) "------------------------------------------------------------"
       do i = 1, ntasks
         coord = grid_coords(glob(i), :)
-        write (*, "(x,i4,x,i11,x,i12,x,i6,a,i2,x,i2,x,i2,a,x,i10)") &
+        write (*, "(x,i4,x,i11,x,i12,x,i6,a,i0,x,i0,x,i0,a,x,i10)") &
           & i - 1, loc(i), glob(i), color(i), &
           & '    (', coord(1), coord(2), coord(3), ')  ', &
           & grid_root(coord(1), coord(2), coord(3))
