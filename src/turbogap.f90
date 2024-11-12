@@ -102,7 +102,7 @@ program turbogap
   integer, allocatable :: n_neigh(:), neighbors_list(:), alpha_max(:), species(:), species_supercell(:), &
        neighbor_species(:), sph_temp_int(:), der_neighbors(:), der_neighbors_list(:), &
        i_beg_list(:), i_end_list(:), j_beg_list(:), j_end_list(:), species_idx(:), mc_id(:), n_mc_species(:)
-  integer :: n_sites, n_sites_local, i, j, k, i2, j2, n_soap, k2, k3, l, n_sites_this, ierr, rank, ntasks, dim, n_sp, &
+  integer :: n_sites, i, j, k, i2, j2, n_soap, k2, k3, l, n_sites_this, ierr, rank, ntasks, dim, n_sp, &
        n_pos, n_sp_sc, this_i_beg, this_i_end, this_j_beg, this_j_end, this_n_sites_mpi, n_sites_prev = 0, &
        n_atom_pairs_by_rank_prev, cPnz
   integer :: l_max, n_atom_pairs, n_max, ijunk, central_species = 0, n_atom_pairs_total
@@ -150,6 +150,7 @@ program turbogap
   logical, allocatable :: compress_soap_mpi(:)
 
   ! Domain decomposition
+  integer :: n_sites_global, n_sites_ghost
   real*8 :: cell(3:3), cell_origo(3)
   integer, allocatable :: color(:), grid_coords(:,:), grid_root(:,:,:), &
                           placement(:), sort_order(:)
@@ -986,7 +987,6 @@ program turbogap
                           0, grid_comm, ierr)
            call mpi_bcast(distribute_displs, global_ntasks, MPI_INTEGER, &
                           0, grid_comm, ierr)
-           call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, grid_comm, ierr)
            if (global_rank == 0) then
               call cpu_time(time_grid_prepare(2))
               time_grid_prepare(3) = time_grid_prepare(2) &
@@ -995,16 +995,21 @@ program turbogap
                 write(*,*) "time(grid_prepare):", time_grid_prepare(3)
               end if
            end if
-           n_sites_local = distribute_counts(global_rank + 1)
+           call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, grid_comm, ierr)
+           n_sites_global = n_sites
+           n_sites = distribute_counts(global_rank + 1)
         end if
         ! FIXME: either allow different values or use just one variable
-        call mpi_bcast(n_sites_local, 1, MPI_INTEGER, 0, local_comm, ierr)
-        n_pos = n_sites_local
-        n_sp = n_sites_local
-        n_sp_sc = n_sites_local
-        ! FIXME: lazy swap... variables should be renamed
-        n_sites_local = n_sites ! really n_sites_global
-        n_sites = n_pos
+        call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, local_comm, ierr)
+        call mpi_bcast(n_sites_global, 1, MPI_INTEGER, 0, local_comm, ierr)
+        n_pos = n_sites
+        n_sp = n_sites
+        n_sp_sc = n_sites
+        ! ghost sites for halo exchange
+        n_sites_ghost = n_sites_global / ntasks * (grid_dims * 2 + 0.1)
+        if ((n_sites_ghost + n_sites) > n_sites_global) then
+           n_sites_ghost = n_sites_global - n_sites
+        end if
      else if (params%do_dd .and. md_istep /= 0) then
        ! migrate out-of-cell sites between domains
        ! reallocate arrays
