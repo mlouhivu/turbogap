@@ -1128,13 +1128,6 @@ program turbogap
         time_mpi_positions(3) = time_mpi_positions(3) + time_mpi_positions(2) - time_mpi_positions(1)
      end if
 #endif
-     !   Now that all ranks know the size of n_sites, we allocate do_list
-     if( .not. params%do_md .or. (params%do_md .and. md_istep == 0) .or. &
-          ( params%do_mc ) )then
-        if( allocated(do_list))deallocate(do_list)
-        allocate( do_list(1:n_sites) )
-        do_list = .true.
-     end if
      !
      call cpu_time(time1)
 #ifdef _MPIF90
@@ -1167,9 +1160,17 @@ program turbogap
      end if
      ! NOTE: ARRAYS MAY HAVE CHANGED HERE
 
-#ifdef _MPIF90
      !   Overlapping domain decomposition with subcommunicators goes here <------------------- TO DO
 
+     !   Now that all ranks know the size of n_sites, we allocate do_list
+     if( .not. params%do_md .or. (params%do_md .and. md_istep == 0) .or. &
+          ( params%do_mc ) )then
+        if( allocated(do_list))deallocate(do_list)
+        allocate( do_list(1:n_sites) )
+        do_list = .true.
+     end if
+
+#ifdef _MPIF90
      !   This is some trivial MPI parallelization to make sure the code works fine
      if( rank < mod( n_sites, ntasks ) )then
         i_beg = 1 + rank*(n_sites / ntasks + 1)
