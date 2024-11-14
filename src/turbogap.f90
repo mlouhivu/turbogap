@@ -170,6 +170,7 @@ program turbogap
   integer :: grid_borders_size
   real*8 :: grid_surface(3,3)
   integer, allocatable :: distribute_counts(:), distribute_displs(:)
+  logical :: supercell_has_changed = .false.
 
   ! Nested sampling
   real*8 :: e_max, e_kin, rand, rand_scale(1:6)
@@ -963,12 +964,14 @@ program turbogap
         end if
         ! FIXME: one should flag if the supercell has changed to force a
         !        complete reboot of the domain decomposition
+        supercell_has_changed = .false.
      end if
+     call mpi_bcast(supercell_has_changed, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, ierr)
      ! NOTE: ARRAYS MAY HAVE CHANGED HERE
 
      !   Overlapping domain decomposition with subcommunicators goes here <------------------- TO DO
 
-     if (params%do_dd .and. md_istep == 0) then
+     if (params%do_dd .and. (md_istep == 0 .or. supercell_has_changed)) then
         if (local_rank == 0) then
            if (global_rank == 0) then
               call cpu_time(time_grid_prepare(1))
