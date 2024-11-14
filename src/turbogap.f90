@@ -154,6 +154,7 @@ program turbogap
   real*8 :: cell(3:3), cell_origo(3)
   integer, allocatable :: color(:), grid_coords(:,:), grid_root(:,:,:), &
                           placement(:), sort_order(:)
+  integer, allocatable :: global_ids(:), ids(:)
   real*8, allocatable :: buffer_positions(:,:), buffer_velocities(:,:)
   real*8, allocatable :: global_positions(:,:), global_velocities(:,:), &
                          global_masses(:)
@@ -1015,6 +1016,11 @@ program turbogap
               global_xyz_species_supercell = xyz_species_supercell(sort_order)
               global_species_supercell = species_supercell(sort_order)
               global_fix_atom = fix_atom(:,sort_order)
+              ! keep track of site IDs
+              if (allocated(global_ids)) deallocate(global_ids)
+              allocate(global_ids(1:n_sites))
+              global_ids = [(i, i=1,n_sites)]
+              global_ids = global_ids(sort_order)
            end if
            ! prepare to distribute sites
            allocate(distribute_counts(global_ntasks))
@@ -1067,6 +1073,8 @@ program turbogap
         allocate(species_supercell(1:n_sp_sc + n_sites_ghost))
         if (allocated(fix_atom)) deallocate(fix_atom)
         allocate(fix_atom(1:3,1:n_sp + n_sites_ghost))
+        if (allocated(ids)) deallocate(ids)
+        allocate(ids(1:n_sites))
      else if (params%do_dd .and. md_istep /= 0) then
        ! migrate out-of-cell sites between domains
        ! reallocate arrays
@@ -1109,6 +1117,9 @@ program turbogap
               if (global_rank == 0) then
                  call cpu_time(time_grid_distribute(1))
               end if
+              call grid_distribute(global_ids, ids, &
+                                   distribute_counts, distribute_displs, &
+                                   MPI_INTEGER, grid_comm, global_rank)
               call grid_distribute(global_masses, masses, &
                                    distribute_counts, distribute_displs, &
                                    MPI_DOUBLE_PRECISION, grid_comm, global_rank)
