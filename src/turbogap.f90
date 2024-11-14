@@ -1010,6 +1010,23 @@ program turbogap
         if ((n_sites_ghost + n_sites) > n_sites_global) then
            n_sites_ghost = n_sites_global - n_sites
         end if
+        ! allocate for own + ghost sites
+        if (allocated(positions)) deallocate(positions)
+        allocate(positions(1:3, n_pos + n_sites_ghost))
+        if (allocated(velocities)) deallocate(velocities)
+        allocate(velocities(1:3, n_sp + n_sites_ghost))
+        if (allocated(masses)) deallocate(masses)
+        allocate(masses(1:n_sp + n_sites_ghost))
+        if (allocated(xyz_species)) deallocate(xyz_species)
+        allocate(xyz_species(1:n_sp + n_sites_ghost))
+        if (allocated(species)) deallocate(species)
+        allocate(species(1:n_sp + n_sites_ghost))
+        if (allocated(xyz_species_supercell)) deallocate(xyz_species_supercell)
+        allocate(xyz_species_supercell(1:n_sp_sc + n_sites_ghost))
+        if (allocated(species_supercell)) deallocate(species_supercell)
+        allocate(species_supercell(1:n_sp_sc + n_sites_ghost))
+        if (allocated(fix_atom)) deallocate(fix_atom)
+        allocate(fix_atom(1:3,1:n_sp + n_sites_ghost))
      else if (params%do_dd .and. md_istep /= 0) then
        ! migrate out-of-cell sites between domains
        ! reallocate arrays
@@ -1021,29 +1038,29 @@ program turbogap
         call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
         call cpu_time(time_mpi(2))
         time_mpi(3) = time_mpi(3) + time_mpi(2) - time_mpi(1)
-     end if
 
-     if(allocated(positions))deallocate(positions)
-     allocate( positions(1:3, n_pos) )
-     if( params%do_md .or. params%do_nested_sampling .or. params%do_mc )then
-        if(allocated(velocities))deallocate(velocities)
-        allocate( velocities(1:3, n_sp) )
-        !      allocate( masses(n_pos) )
-        if(allocated( masses ))deallocate( masses )
-        allocate( masses(1:n_sp) )
-        ! if(allocated( fix_atom ))deallocate( fix_atom )
-        ! allocate( fix_atom(1:3, 1:n_sp) )
+        if(allocated(positions))deallocate(positions)
+        allocate( positions(1:3, n_pos) )
+        if( params%do_md .or. params%do_nested_sampling .or. params%do_mc )then
+           if(allocated(velocities))deallocate(velocities)
+           allocate( velocities(1:3, n_sp) )
+           !      allocate( masses(n_pos) )
+           if(allocated( masses ))deallocate( masses )
+           allocate( masses(1:n_sp) )
+           ! if(allocated( fix_atom ))deallocate( fix_atom )
+           ! allocate( fix_atom(1:3, 1:n_sp) )
+        end if
+        if(allocated( xyz_species ))deallocate( xyz_species )
+        allocate( xyz_species(1:n_sp) )
+        if(allocated( species ))deallocate( species )
+        allocate( species(1:n_sp) )
+        if(allocated( xyz_species_supercell ))deallocate( xyz_species_supercell )
+        allocate( xyz_species_supercell(1:n_sp_sc) )
+        if(allocated( species_supercell ))deallocate( species_supercell )
+        allocate( species_supercell(1:n_sp_sc) )
+        if(allocated( fix_atom ))deallocate( fix_atom )
+        allocate( fix_atom(1:3,1:n_sp) )
      end if
-     if(allocated( xyz_species ))deallocate( xyz_species )
-     allocate( xyz_species(1:n_sp) )
-     if(allocated( species ))deallocate( species )
-     allocate( species(1:n_sp) )
-     if(allocated( xyz_species_supercell ))deallocate( xyz_species_supercell )
-     allocate( xyz_species_supercell(1:n_sp_sc) )
-     if(allocated( species_supercell ))deallocate( species_supercell )
-     allocate( species_supercell(1:n_sp_sc) )
-     if(allocated( fix_atom ))deallocate( fix_atom )
-     allocate( fix_atom(1:3,1:n_sp) )
 
      if (params%do_dd) then
         if (md_istep == 0) then
