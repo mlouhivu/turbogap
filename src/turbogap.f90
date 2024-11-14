@@ -931,6 +931,43 @@ program turbogap
         end if
      END IF
 
+     !
+     call cpu_time(time1)
+#ifdef _MPIF90
+     !   Parallel neighbors list build
+     call mpi_bcast(rebuild_neighbors_list, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, ierr)
+#endif
+
+     !   If we're using a box rescaling algorithm or a barostat, then the box size can
+     !   become smaller or bigger than the cutoff sphere. If that happens, and the current
+     !   situation is different from before, then we need to figure out if we need to
+     !   construct a supercell (i.e., the box was bigger than the cutoff sphere and now
+     !   is smaller -> makes computations slower) or default back to the primitive unit cell
+     !   (i.e., the box was smaller and now is bigger -> makes computations faster).
+     !   We only need to check if rebuild_neighbors_list = .true.
+     if (rank == 0) then
+        if( rebuild_neighbors_list .and.  params%do_mc .and. mc_istep > 0 )then
+           call read_xyz(mc_file, .true., params%all_atoms, params%do_timing, &
+                n_species, params%species_types, repeat_xyz, rcut_max, params%which_atom, &
+                positions, params%do_md, velocities, params%masses_types, masses, xyz_species, &
+                xyz_species_supercell, species, species_supercell, indices, a_box, b_box, c_box, &
+                n_sites, .true., fix_atom, params%t_beg, &
+                params%write_array_property(6), .false.)
+        else if( rebuild_neighbors_list )then
+           call read_xyz(params%atoms_file, .true., params%all_atoms, params%do_timing, &
+                n_species, params%species_types, repeat_xyz, rcut_max, params%which_atom, &
+                positions, params%do_md, velocities, params%masses_types, masses, xyz_species, &
+                xyz_species_supercell, species, species_supercell, indices, a_box, b_box, c_box, &
+                n_sites, .true., fix_atom, params%t_beg, params%write_array_property(6), &
+                .false.)
+        end if
+        ! FIXME: one should flag if the supercell has changed to force a
+        !        complete reboot of the domain decomposition
+     end if
+     ! NOTE: ARRAYS MAY HAVE CHANGED HERE
+
+     !   Overlapping domain decomposition with subcommunicators goes here <------------------- TO DO
+
      if (params%do_dd .and. md_istep == 0) then
         if (local_rank == 0) then
            if (global_rank == 0) then
@@ -1152,39 +1189,6 @@ program turbogap
         time_mpi_positions(3) = time_mpi_positions(3) + time_mpi_positions(2) - time_mpi_positions(1)
      end if
 #endif
-     !
-     call cpu_time(time1)
-#ifdef _MPIF90
-     !   Parallel neighbors list build
-     call mpi_bcast(rebuild_neighbors_list, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, ierr)
-#endif
-
-     !   If we're using a box rescaling algorithm or a barostat, then the box size can
-     !   become smaller or bigger than the cutoff sphere. If that happens, and the current
-     !   situation is different from before, then we need to figure out if we need to
-     !   construct a supercell (i.e., the box was bigger than the cutoff sphere and now
-     !   is smaller -> makes computations slower) or default back to the primitive unit cell
-     !   (i.e., the box was smaller and now is bigger -> makes computations faster).
-     !   We only need to check if rebuild_neighbors_list = .true.
-     if( rebuild_neighbors_list .and.  params%do_mc .and. mc_istep > 0 )then
-        call read_xyz(mc_file, .true., params%all_atoms, params%do_timing, &
-             n_species, params%species_types, repeat_xyz, rcut_max, params%which_atom, &
-             positions, params%do_md, velocities, params%masses_types, masses, xyz_species, &
-             xyz_species_supercell, species, species_supercell, indices, a_box, b_box, c_box, &
-             n_sites, .true., fix_atom, params%t_beg, &
-             params%write_array_property(6), .false.)
-     else if( rebuild_neighbors_list )then
-        call read_xyz(params%atoms_file, .true., params%all_atoms, params%do_timing, &
-             n_species, params%species_types, repeat_xyz, rcut_max, params%which_atom, &
-             positions, params%do_md, velocities, params%masses_types, masses, xyz_species, &
-             xyz_species_supercell, species, species_supercell, indices, a_box, b_box, c_box, &
-             n_sites, .true., fix_atom, params%t_beg, params%write_array_property(6), &
-             .false.)
-
-     end if
-     ! NOTE: ARRAYS MAY HAVE CHANGED HERE
-
-     !   Overlapping domain decomposition with subcommunicators goes here <------------------- TO DO
 
      !   Now that all ranks know the size of n_sites, we allocate do_list
      if( .not. params%do_md .or. (params%do_md .and. md_istep == 0) .or. &
