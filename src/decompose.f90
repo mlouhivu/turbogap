@@ -318,6 +318,47 @@ module decompose
 
 
 !**************************************************************************
+  subroutine communicate_grid_neighbors(grid_neighbor, grid_comm, global_rank)
+    use mpi
+    implicit none
+    integer, intent(inout) :: grid_neighbor(26)
+    integer, intent(in) :: grid_comm
+    integer, intent(in) :: global_rank
+
+    integer :: i, j, k
+    integer :: send_buffer(4)
+    integer :: recv_buffer(4)
+
+    send_buffer(:) = grid_neighbor(3:6)
+    mpi_sendrecv(send_buffer, 4, MPI_INTEGER, grid_neighbor(2), 0, &
+                 recv_buffer, 4, MPI_INTEGER, grid_neighbor(1), 0, &
+                 grid_comm, status, ierr)
+    grid_neighbor(7:10) = recv_buffer(:)
+    mpi_sendrecv(send_buffer, 4, MPI_INTEGER, grid_neighbor(1), 0, &
+                 recv_buffer, 4, MPI_INTEGER, grid_neighbor(2), 0, &
+                 grid_comm, status, ierr)
+    grid_neighbor(11:14) = recv_buffer(:)
+
+    send_buffer(1:2) = grid_neighbor(5:6)
+    send_buffer(3:4) = grid_neighbor(9:10)
+    send_buffer(5:6) = grid_neighbor(13:14)
+    mpi_sendrecv(send_buffer, 6, MPI_INTEGER, grid_neighbor(4), 0, &
+                 recv_buffer, 6, MPI_INTEGER, grid_neighbor(3), 0, &
+                 grid_comm, status, ierr)
+    grid_neighbor(15:16) = recv_buffer(1:2)
+    grid_neighbor(19:22) = recv_buffer(3:6)
+    mpi_sendrecv(send_buffer, 4, MPI_INTEGER, grid_neighbor(3), 0, &
+                 recv_buffer, 4, MPI_INTEGER, grid_neighbor(4), 0, &
+                 grid_comm, status, ierr)
+    grid_neighbor(17:18) = recv_buffer(1:2)
+    grid_neighbor(23:26) = recv_buffer(3:6)
+
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
   subroutine domain_borders(border, grid_borders, grid_coords, &
                           global_rank)
     implicit none
