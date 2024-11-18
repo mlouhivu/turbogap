@@ -164,7 +164,7 @@ program turbogap
                               global_xyz_species_supercell(:)
   integer :: local_comm, global_comm, grid_comm
   integer :: local_rank, local_ntasks, global_rank, global_ntasks
-  integer :: neighbor(6)
+  integer :: grid_neighbor(6)
   logical :: grid_periodic(3) = (/ .true., .true., .true. /)
   integer :: grid_dims
   real*8, allocatable :: grid_borders(:,:)
@@ -619,9 +619,9 @@ program turbogap
     call mpi_comm_rank(global_comm, global_rank, ierr)
     call mpi_cart_create(global_comm, 3, params%dd_grid, grid_periodic, &
                          .false., grid_comm, ierr)
-    call mpi_cart_shift(grid_comm, 0, 1, neighbor(1), neighbor(2), ierr)
-    call mpi_cart_shift(grid_comm, 1, 1, neighbor(3), neighbor(4), ierr)
-    call mpi_cart_shift(grid_comm, 2, 1, neighbor(5), neighbor(6), ierr)
+    call mpi_cart_shift(grid_comm, 0, 1, grid_neighbor(1), grid_neighbor(2), ierr)
+    call mpi_cart_shift(grid_comm, 1, 1, grid_neighbor(3), grid_neighbor(4), ierr)
+    call mpi_cart_shift(grid_comm, 2, 1, grid_neighbor(5), grid_neighbor(6), ierr)
     allocate(grid_coords(global_ntasks, 3))
     allocate(grid_root(params%dd_grid(1), params%dd_grid(2), params%dd_grid(3)))
     if (rank == 0) then
@@ -1076,8 +1076,13 @@ program turbogap
         if (allocated(ids)) deallocate(ids)
         allocate(ids(1:n_sites))
      else if (params%do_dd .and. md_istep /= 0) then
-       ! migrate out-of-cell sites between domains
-       ! reallocate arrays
+        ! FIXME: shift positions to remove out-of-box sites due to PBC
+        ! migrate out-of-cell sites between domains
+        migrate(params%dd_grid, grid_surface, grid_borders, grid_neighbor, &
+                grid_comm, n_sites, n_pos, n_sp, n_sp_sc, positions, &
+                velocities, masses, xyz_species, species, &
+                xyz_species_supercell, species_supercell, fix_atom, ids)
+        ! reallocate arrays
      else
         call cpu_time(time_mpi(1))
         call mpi_bcast(n_pos, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)

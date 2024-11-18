@@ -318,6 +318,218 @@ module decompose
 
 
 !**************************************************************************
+  subroutine domain_borders(border, grid_borders, grid_coords, &
+                          global_rank)
+    implicit none
+    real*8, intent(out) :: border(6)
+    real*8, intent(in) :: grid_borders(:,:)
+    integer, intent(in) :: grid_coords(3,:)
+    integer, intent(in) :: global_rank
+
+    integer :: i, j, k
+
+    i, j, k = grid_coords(global_rank)
+    border(1) = grid_borders(1, i)
+    border(2) = grid_borders(1, i+1)
+    border(3) = grid_borders(2, j)
+    border(4) = grid_borders(2, j+1)
+    border(5) = grid_borders(3, k)
+    border(6) = grid_borders(3, k+1)
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
+subroutine migration_mask(mask, border, norm, n_pos)
+    implicit none
+    logical, intent(out) :: mask(6, n_pos)
+    real*8, intent(in) :: border(6)
+    real*8, intent(in) :: norm(n_pos, 3)
+    integer, intent(in) :: n_pos
+
+    mask(1) = norm(:,1) <= border(1)
+    mask(2) = norm(:,1) > border(2)
+    mask(3) = norm(:,2) <= border(3)
+    mask(4) = norm(:,2) > border(4)
+    mask(5) = norm(:,3) <= border(5)
+    mask(6) = norm(:,3) > border(6)
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
+  subroutine migrate(grid, surface, borders, neighbors, &
+                     grid_comm, local_comm, global_rank, local_rank, &
+                     n_sites, n_pos, n_sp, n_sp_sc, &
+                     positions, velocities, masses, xyz_species, &
+                     species, xyz_species_supercell, species_supercell, &
+                     fix_atom, ids)
+    implicit none
+
+    integer, intent(in) :: grid(3)
+    real*8, intent(in) :: surface(3,3)
+    real*8, intent(in) :: borders(:,:)
+    integer, intent(in) :: neighbors(6)
+    integer, intent(in) :: grid_comm
+    integer, intent(in) :: local_comm
+    integer, intent(in) :: global_rank
+    integer, intent(in) :: local_rank
+    integer, intent(in) :: n_sites
+    integer, intent(in) :: n_pos
+    integer, intent(in) :: n_sp
+    integer, intent(in) :: n_sp_sc
+    real*8, intent(in) :: positions(3, n_pos)
+    real*8, intent(in) :: velocities(3, n_sp)
+    real*8, intent(in) :: masses(n_sp)
+    integer, intent(in) :: xyz_species(n_sp)
+    integer, intent(in) :: species(n_sp)
+    integer, intent(in) :: xyz_species_supercell(n_sp_sc)
+    integer, intent(in) :: species_supercell(n_sp_sc)
+    logical, intent(in) :: fix_atom(3, n_sp)
+    integer, intent(in) :: ids(n_sites)
+
+    real*8 :: norm(n_pos, 3)
+    integer :: i, j, n
+    real*8 :: local_border(6)
+    logical :: mask(6, n_pos)
+    integer :: send_count(6)
+    integer :: recv_count(6)
+    integer :: status(MPI_STATUS_SIZE)
+
+    call domain_borders(local_border, grid_borders, grid_coords, global_rank)
+    call vectorised_projection(norm, surface, positions, n_sites)
+    call migration_mask(mask, local_border, norm, n_pos)
+
+    send_count(:) = count(mask(:))
+
+    ! note: for domain (i, j, k)
+    !   neighbors(1) -> (i-1, j, k)
+    !   neighbors(2) -> (i+1, j, k)
+    !   neighbors(3) -> (i, j-1, k)
+    !     ...
+    !   neighbors(6) -> (i, j, k+1)
+
+    ! how many sites to migrate?
+    mpi_sendrecv(send_count(1), 1, MPI_INTEGER, neighbors(1), 0, &
+                 recv_count(2), 1, MPI_INTEGER, neighbors(2), 0, &
+                 grid_comm, status, ierr)
+    mpi_sendrecv(send_count(2), 1, MPI_INTEGER, neighbors(2), 0, &
+                 recv_count(1), 1, MPI_INTEGER, neighbors(1), 0, &
+                 grid_comm, status, ierr)
+    mpi_sendrecv(send_count(3), 1, MPI_INTEGER, neighbors(3), 0, &
+                 recv_count(4), 1, MPI_INTEGER, neighbors(4), 0, &
+                 grid_comm, status, ierr)
+    mpi_sendrecv(send_count(4), 1, MPI_INTEGER, neighbors(4), 0, &
+                 recv_count(3), 1, MPI_INTEGER, neighbors(3), 0, &
+                 grid_comm, status, ierr)
+    mpi_sendrecv(send_count(5), 1, MPI_INTEGER, neighbors(5), 0, &
+                 recv_count(6), 1, MPI_INTEGER, neighbors(6), 0, &
+                 grid_comm, status, ierr)
+    mpi_sendrecv(send_count(6), 1, MPI_INTEGER, neighbors(6), 0, &
+                 recv_count(5), 1, MPI_INTEGER, neighbors(5), 0, &
+                 grid_comm, status, ierr)
+    ! allocate buffers
+    allocate(send_buffer_r(max(send_count)))
+    allocate(send_buffer_i(max(send_count)))
+    allocate(send_buffer_l(max(send_count)))
+    ! migrate sites
+    send_buffer_r(:send_count(1)) = positions(mask(1))
+    mpi_sendrecv(send_buffer_r, send_count(1), MPI_DOUBLE_PRECISION, neighbors(1), 0, &
+                 positions(...), recv_count(1), MPI_DOUBLE_PRECISION, neighbors(2), 0, &
+                 grid_comm, status, ierr)
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
+  subroutine exchange(grid, surface, borders, neighbors, &
+                     grid_comm, local_comm, global_rank, local_rank, &
+                     n_sites, n_pos, n_sp, n_sp_sc, &
+                     positions, velocities, masses, xyz_species, &
+                     species, xyz_species_supercell, species_supercell, &
+                     fix_atom, ids)
+    implicit none
+
+    integer, intent(in) :: grid(3)
+    real*8, intent(in) :: surface(3,3)
+    real*8, intent(in) :: borders(:,:)
+    integer, intent(in) :: neighbors(6)
+    integer, intent(in) :: grid_comm
+    integer, intent(in) :: local_comm
+    integer, intent(in) :: global_rank
+    integer, intent(in) :: local_rank
+    integer, intent(in) :: n_sites
+    integer, intent(in) :: n_pos
+    integer, intent(in) :: n_sp
+    integer, intent(in) :: n_sp_sc
+    real*8, intent(in) :: positions(3, n_pos)
+    real*8, intent(in) :: velocities(3, n_sp)
+    real*8, intent(in) :: masses(n_sp)
+    integer, intent(in) :: xyz_species(n_sp)
+    integer, intent(in) :: species(n_sp)
+    integer, intent(in) :: xyz_species_supercell(n_sp_sc)
+    integer, intent(in) :: species_supercell(n_sp_sc)
+    logical, intent(in) :: fix_atom(3, n_sp)
+    integer, intent(in) :: ids(n_sites)
+
+    real*8 :: norm(n_pos, 3)
+    integer :: i, j, n
+    real*8 :: local_border(6)
+    logical :: mask(6, n_pos)
+    integer :: send_count(6)
+    integer :: recv_count(6)
+    integer :: status(MPI_STATUS_SIZE)
+
+    call domain_borders(local_border, grid_borders, grid_coords, global_rank)
+    call vectorised_projection(norm, surface, positions, n_sites)
+    call migration_mask(mask, local_border, norm, n_pos) ! FIXME: border shift
+
+    send_count(:) = count(mask(:))
+
+    ! note: for domain (i, j, k)
+    !   neighbors(1) -> (i-1, j, k)
+    !   neighbors(2) -> (i+1, j, k)
+    !   neighbors(3) -> (i, j-1, k)
+    !     ...
+    !   neighbors(6) -> (i, j, k+1)
+
+    ! how many ghost sites to send / receive?
+    mpi_sendrecv(send_count(1), 1, MPI_INTEGER, neighbors(1), 0, &
+                 recv_count(2), 1, MPI_INTEGER, neighbors(2), 0, &
+                 grid_comm, status, ierr)
+    mpi_sendrecv(send_count(2), 1, MPI_INTEGER, neighbors(2), 0, &
+                 recv_count(1), 1, MPI_INTEGER, neighbors(1), 0, &
+                 grid_comm, status, ierr)
+    mpi_sendrecv(send_count(3), 1, MPI_INTEGER, neighbors(3), 0, &
+                 recv_count(4), 1, MPI_INTEGER, neighbors(4), 0, &
+                 grid_comm, status, ierr)
+    mpi_sendrecv(send_count(4), 1, MPI_INTEGER, neighbors(4), 0, &
+                 recv_count(3), 1, MPI_INTEGER, neighbors(3), 0, &
+                 grid_comm, status, ierr)
+    mpi_sendrecv(send_count(5), 1, MPI_INTEGER, neighbors(5), 0, &
+                 recv_count(6), 1, MPI_INTEGER, neighbors(6), 0, &
+                 grid_comm, status, ierr)
+    mpi_sendrecv(send_count(6), 1, MPI_INTEGER, neighbors(6), 0, &
+                 recv_count(5), 1, MPI_INTEGER, neighbors(5), 0, &
+                 grid_comm, status, ierr)
+    ! allocate buffers
+    allocate(send_buffer_r(max(send_count)))
+    allocate(send_buffer_i(max(send_count)))
+    allocate(send_buffer_l(max(send_count)))
+    ! halo exchange
+    send_buffer_r(:send_count(1)) = positions(mask(1))
+    mpi_sendrecv(send_buffer_r, send_count(1), MPI_DOUBLE_PRECISION, neighbors(1), 0, &
+                 positions(...), recv_count(1), MPI_DOUBLE_PRECISION, neighbors(2), 0, &
+                 grid_comm, status, ierr)
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
   subroutine surface_vector(s, x, y)
     implicit none
 
