@@ -318,6 +318,51 @@ module decompose
 
 
 !**************************************************************************
+  pure integer function get_neighbor_id(i, j, k) result(id)
+    integer, intent(in) :: i
+    integer, intent(in) :: j
+    integer, intent(in) :: k
+
+    integer :: id_grid(-1:1,-1:1,-1:1)
+    ! self
+    id_grid( 0,  0,  0) = 0
+    ! orthogonal neighbors
+    id_grid(-1,  0,  0) = 1
+    id_grid( 1,  0,  0) = 2
+    id_grid( 0, -1,  0) = 3
+    id_grid( 0,  1,  0) = 4
+    id_grid( 0,  0, -1) = 5
+    id_grid( 0,  0,  1) = 6
+    ! diagonal neighbors
+    id_grid(-1, -1,  0) = 7
+    id_grid(-1,  1,  0) = 8
+    id_grid(-1,  0, -1) = 9
+    id_grid(-1,  0,  1) = 10
+    id_grid( 1, -1,  0) = 11
+    id_grid( 1,  1,  0) = 12
+    id_grid( 1,  0, -1) = 13
+    id_grid( 1,  0,  1) = 14
+    id_grid( 0, -1, -1) = 15
+    id_grid( 0, -1,  1) = 16
+    id_grid( 0,  1, -1) = 17
+    id_grid( 0,  1,  1) = 18
+    ! corners
+    id_grid(-1, -1, -1) = 19
+    id_grid(-1, -1,  1) = 20
+    id_grid( 1, -1, -1) = 21
+    id_grid( 1, -1,  1) = 22
+    id_grid(-1,  1, -1) = 23
+    id_grid(-1,  1,  1) = 24
+    id_grid( 1,  1, -1) = 25
+    id_grid( 1,  1,  1) = 26
+
+    id = id_grid(i, j, k)
+  end function
+!**************************************************************************
+
+
+
+!**************************************************************************
   subroutine init_grid_neighbors(grid_neighbor, grid_comm, local_comm, &
                                  local_rank)
     use mpi
