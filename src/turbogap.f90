@@ -619,9 +619,7 @@ program turbogap
     call mpi_comm_rank(global_comm, global_rank, ierr)
     call mpi_cart_create(global_comm, 3, params%dd_grid, grid_periodic, &
                          .false., grid_comm, ierr)
-    call mpi_cart_shift(grid_comm, 0, 1, grid_neighbor(1), grid_neighbor(2), ierr)
-    call mpi_cart_shift(grid_comm, 1, 1, grid_neighbor(3), grid_neighbor(4), ierr)
-    call mpi_cart_shift(grid_comm, 2, 1, grid_neighbor(5), grid_neighbor(6), ierr)
+    call init_grid_neighbors(grid_neighbor, grid_comm, local_comm, local_rank)
     allocate(grid_coords(global_ntasks, 3))
     allocate(grid_root(params%dd_grid(1), params%dd_grid(2), params%dd_grid(3)))
     if (rank == 0) then
