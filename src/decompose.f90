@@ -375,33 +375,34 @@ module decompose
     integer :: i, j, k, ierr
     integer :: send_buffer(6)
     integer :: recv_buffer(6)
+    integer :: status(MPI_STATUS_SIZE)
 
     if (local_rank == 0) then
        call mpi_cart_shift(grid_comm, 0, 1, grid_neighbor(1), grid_neighbor(2), ierr)
        call mpi_cart_shift(grid_comm, 1, 1, grid_neighbor(3), grid_neighbor(4), ierr)
        call mpi_cart_shift(grid_comm, 2, 1, grid_neighbor(5), grid_neighbor(6), ierr)
 
-       send_buffer(:) = grid_neighbor(3:6)
-       mpi_sendrecv(send_buffer, 4, MPI_INTEGER, grid_neighbor(2), 0, &
-                    recv_buffer, 4, MPI_INTEGER, grid_neighbor(1), 0, &
-                    grid_comm, status, ierr)
-       grid_neighbor(7:10) = recv_buffer(:)
-       mpi_sendrecv(send_buffer, 4, MPI_INTEGER, grid_neighbor(1), 0, &
-                    recv_buffer, 4, MPI_INTEGER, grid_neighbor(2), 0, &
-                    grid_comm, status, ierr)
-       grid_neighbor(11:14) = recv_buffer(:)
+       send_buffer(1:4) = grid_neighbor(3:6)
+       call mpi_sendrecv(send_buffer, 4, MPI_INTEGER, grid_neighbor(2), 0, &
+                         recv_buffer, 4, MPI_INTEGER, grid_neighbor(1), 0, &
+                         grid_comm, status, ierr)
+       grid_neighbor(7:10) = recv_buffer(1:4)
+       call mpi_sendrecv(send_buffer, 4, MPI_INTEGER, grid_neighbor(1), 0, &
+                         recv_buffer, 4, MPI_INTEGER, grid_neighbor(2), 0, &
+                         grid_comm, status, ierr)
+       grid_neighbor(11:14) = recv_buffer(1:4)
 
        send_buffer(1:2) = grid_neighbor(5:6)
        send_buffer(3:4) = grid_neighbor(9:10)
        send_buffer(5:6) = grid_neighbor(13:14)
-       mpi_sendrecv(send_buffer, 6, MPI_INTEGER, grid_neighbor(4), 0, &
-                    recv_buffer, 6, MPI_INTEGER, grid_neighbor(3), 0, &
-                    grid_comm, status, ierr)
+       call mpi_sendrecv(send_buffer, 6, MPI_INTEGER, grid_neighbor(4), 0, &
+                         recv_buffer, 6, MPI_INTEGER, grid_neighbor(3), 0, &
+                         grid_comm, status, ierr)
        grid_neighbor(15:16) = recv_buffer(1:2)
        grid_neighbor(19:22) = recv_buffer(3:6)
-       mpi_sendrecv(send_buffer, 4, MPI_INTEGER, grid_neighbor(3), 0, &
-                    recv_buffer, 4, MPI_INTEGER, grid_neighbor(4), 0, &
-                    grid_comm, status, ierr)
+       call mpi_sendrecv(send_buffer, 4, MPI_INTEGER, grid_neighbor(3), 0, &
+                         recv_buffer, 4, MPI_INTEGER, grid_neighbor(4), 0, &
+                         grid_comm, status, ierr)
        grid_neighbor(17:18) = recv_buffer(1:2)
        grid_neighbor(23:26) = recv_buffer(3:6)
     end if
@@ -413,17 +414,18 @@ module decompose
 
 
 !**************************************************************************
-  subroutine domain_borders(border, grid_borders, grid_coords, &
-                          global_rank)
+  subroutine domain_borders(border, grid_borders, grid_coords, global_rank)
     implicit none
     real*8, intent(out) :: border(6)
     real*8, intent(in) :: grid_borders(:,:)
-    integer, intent(in) :: grid_coords(3,:)
+    integer, intent(in) :: grid_coords(0:,:)
     integer, intent(in) :: global_rank
 
     integer :: i, j, k
 
-    i, j, k = grid_coords(global_rank)
+    i = grid_coords(global_rank, 1) + 1
+    j = grid_coords(global_rank, 2) + 1
+    k = grid_coords(global_rank, 3) + 1
     border(1) = grid_borders(1, i)
     border(2) = grid_borders(1, i+1)
     border(3) = grid_borders(2, j)
@@ -438,117 +440,339 @@ module decompose
 !**************************************************************************
 subroutine migration_mask(mask, border, norm, n_pos)
     implicit none
+    logical, intent(out) :: mask(0:26, n_pos)
+    real*8, intent(in) :: border(6)
+    real*8, intent(in) :: norm(n_pos, 3)
+    integer, intent(in) :: n_pos
+
+    logical :: mask_i(n_pos)
+    logical :: mask_ij(n_pos)
+    logical :: mask_b(3, -1:1, n_pos)
+    integer :: i, j, k
+
+    ! true if outside borders
+    mask_b(1,-1, :) = norm(:,1) <= border(1)
+    mask_b(1, 1, :) = norm(:,1) > border(2)
+    mask_b(2,-1, :) = norm(:,2) <= border(3)
+    mask_b(2, 1, :) = norm(:,2) > border(4)
+    mask_b(3,-1, :) = norm(:,3) <= border(5)
+    mask_b(3, 1, :) = norm(:,3) > border(6)
+    ! true if inside borders
+    mask_b(1, 0, :) = .not. (mask_b(1,-1,:) .or. mask_b(1,1,:))
+    mask_b(2, 0, :) = .not. (mask_b(2,-1,:) .or. mask_b(2,1,:))
+    mask_b(3, 0, :) = .not. (mask_b(3,-1,:) .or. mask_b(3,1,:))
+
+    ! combine to form a mask for each neighbor (incl. diagonals)
+    do i = -1, 1
+       mask_i = mask_b(1,i,:)
+       do j = -1, 1
+          mask_ij = mask_i .and. mask_b(2,j,:)
+          do k = -1, 1
+             mask(get_neighbor_id(i,j,k),:) = mask_ij .and. mask_b(3,k,:)
+          end do
+       end do
+    end do
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
+  subroutine check_migration_mask(mask, n_pos)
+    implicit none
+    logical, intent(out) :: mask(0:26, n_pos)
+    integer, intent(in) :: n_pos
+
+    integer :: i
+    integer :: counts(27)
+
+    do i = 0, 26
+       counts(i+1) = count(mask(i,:))
+    end do
+    if (sum(counts) /= n_pos) then
+       write(*,*) "Error: multiple migration targets"
+       stop
+    end if
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
+  subroutine migration_targets(targets, send_count, neighbors, mask, n_pos)
+    implicit none
+    integer, intent(out) :: targets(n_pos)
+    integer, intent(out) :: send_count(26)
+    integer, intent(in) :: neighbors(26)
+    logical, intent(in) :: mask(0:26, n_pos)
+    integer, intent(in) :: n_pos
+
+    integer :: i, n
+
+    targets = 0
+    send_count = 0
+    do i = 1, n_pos
+       do n = 1, 26
+          if (mask(n,i)) then
+             targets(i) = n
+             send_count(n) = send_count(n) + 1
+             exit
+          end if
+       end do
+    end do
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
+subroutine exchange_mask(mask, border, norm, n_pos)
+    implicit none
     logical, intent(out) :: mask(6, n_pos)
     real*8, intent(in) :: border(6)
     real*8, intent(in) :: norm(n_pos, 3)
     integer, intent(in) :: n_pos
 
-    mask(1) = norm(:,1) <= border(1)
-    mask(2) = norm(:,1) > border(2)
-    mask(3) = norm(:,2) <= border(3)
-    mask(4) = norm(:,2) > border(4)
-    mask(5) = norm(:,3) <= border(5)
-    mask(6) = norm(:,3) > border(6)
+    mask(1,:) = norm(:,1) <= border(1)
+    mask(2,:) = norm(:,1) > border(2)
+    mask(3,:) = norm(:,2) <= border(3)
+    mask(4,:) = norm(:,2) > border(4)
+    mask(5,:) = norm(:,3) <= border(5)
+    mask(6,:) = norm(:,3) > border(6)
   end subroutine
 !**************************************************************************
 
 
 
 !**************************************************************************
-  subroutine migrate(grid, surface, borders, neighbors, &
+  subroutine migrate(grid, grid_coords, surface, borders, neighbors, &
                      grid_comm, local_comm, global_rank, local_rank, &
                      n_sites, n_pos, n_sp, n_sp_sc, &
-                     positions, velocities, masses, xyz_species, &
+                     ids, positions, velocities, masses, xyz_species, &
                      species, xyz_species_supercell, species_supercell, &
-                     fix_atom, ids)
+                     fix_atom, debug)
+    use mpi
     implicit none
 
     integer, intent(in) :: grid(3)
+    integer, intent(in) :: grid_coords(:,:)
     real*8, intent(in) :: surface(3,3)
     real*8, intent(in) :: borders(:,:)
-    integer, intent(in) :: neighbors(6)
+    integer, intent(in) :: neighbors(26)
     integer, intent(in) :: grid_comm
     integer, intent(in) :: local_comm
     integer, intent(in) :: global_rank
     integer, intent(in) :: local_rank
-    integer, intent(in) :: n_sites
-    integer, intent(in) :: n_pos
-    integer, intent(in) :: n_sp
-    integer, intent(in) :: n_sp_sc
-    real*8, intent(in) :: positions(3, n_pos)
-    real*8, intent(in) :: velocities(3, n_sp)
-    real*8, intent(in) :: masses(n_sp)
-    integer, intent(in) :: xyz_species(n_sp)
-    integer, intent(in) :: species(n_sp)
-    integer, intent(in) :: xyz_species_supercell(n_sp_sc)
-    integer, intent(in) :: species_supercell(n_sp_sc)
-    logical, intent(in) :: fix_atom(3, n_sp)
-    integer, intent(in) :: ids(n_sites)
+    integer, intent(inout) :: n_sites
+    integer, intent(inout) :: n_pos
+    integer, intent(inout) :: n_sp
+    integer, intent(inout) :: n_sp_sc
+    integer, intent(inout), allocatable :: ids(:)
+    real*8, intent(inout), allocatable :: positions(:,:)
+    real*8, intent(inout), allocatable :: velocities(:,:)
+    real*8, intent(inout), allocatable :: masses(:)
+    character*8, intent(inout), allocatable :: xyz_species(:)
+    integer, intent(inout), allocatable :: species(:)
+    character*8, intent(inout), allocatable :: xyz_species_supercell(:)
+    integer, intent(inout), allocatable :: species_supercell(:)
+    logical, intent(inout), allocatable :: fix_atom(:,:)
+    logical, intent(in) :: debug
 
     real*8 :: norm(n_pos, 3)
-    integer :: i, j, n
+    integer :: n, s, r, ierr
+    integer :: n_recv, n_send
     real*8 :: local_border(6)
-    logical :: mask(6, n_pos)
-    integer :: send_count(6)
-    integer :: recv_count(6)
+    logical :: mask(0:26, n_pos)
+    integer :: send_count(26)
+    integer :: recv_count(26)
     integer :: status(MPI_STATUS_SIZE)
+    integer :: targets(n_pos)
+    integer, allocatable :: sort_order(:)
+    integer, allocatable :: buffer_ids(:)
+    real*8, allocatable :: buffer_positions(:,:)
+    real*8, allocatable :: buffer_velocities(:,:)
+    real*8, allocatable :: buffer_masses(:)
+    integer, allocatable :: buffer_species(:)
+    integer, allocatable :: buffer_species_supercell(:)
+    logical, allocatable :: buffer_fix_atom(:,:)
+    character*8, allocatable :: buffer_xyz_species(:)
+    character*8, allocatable :: buffer_xyz_species_supercell(:)
 
-    call domain_borders(local_border, grid_borders, grid_coords, global_rank)
+
+    ! FIXME: assuming n_sites == n_pos == n_sp == n_sp_sc
+
+    call domain_borders(local_border, borders, grid_coords, global_rank)
     call vectorised_projection(norm, surface, positions, n_sites)
     call migration_mask(mask, local_border, norm, n_pos)
-
-    send_count(:) = count(mask(:))
-
-    ! note: for domain (i, j, k)
-    !   neighbors(1) -> (i-1, j, k)
-    !   neighbors(2) -> (i+1, j, k)
-    !   neighbors(3) -> (i, j-1, k)
-    !     ...
-    !   neighbors(6) -> (i, j, k+1)
+    if (debug) then
+       call check_migration_mask(mask, n_pos)
+    end if
+    call migration_targets(targets, send_count, neighbors, mask, n_pos)
 
     ! how many sites to migrate?
-    mpi_sendrecv(send_count(1), 1, MPI_INTEGER, neighbors(1), 0, &
-                 recv_count(2), 1, MPI_INTEGER, neighbors(2), 0, &
-                 grid_comm, status, ierr)
-    mpi_sendrecv(send_count(2), 1, MPI_INTEGER, neighbors(2), 0, &
-                 recv_count(1), 1, MPI_INTEGER, neighbors(1), 0, &
-                 grid_comm, status, ierr)
-    mpi_sendrecv(send_count(3), 1, MPI_INTEGER, neighbors(3), 0, &
-                 recv_count(4), 1, MPI_INTEGER, neighbors(4), 0, &
-                 grid_comm, status, ierr)
-    mpi_sendrecv(send_count(4), 1, MPI_INTEGER, neighbors(4), 0, &
-                 recv_count(3), 1, MPI_INTEGER, neighbors(3), 0, &
-                 grid_comm, status, ierr)
-    mpi_sendrecv(send_count(5), 1, MPI_INTEGER, neighbors(5), 0, &
-                 recv_count(6), 1, MPI_INTEGER, neighbors(6), 0, &
-                 grid_comm, status, ierr)
-    mpi_sendrecv(send_count(6), 1, MPI_INTEGER, neighbors(6), 0, &
-                 recv_count(5), 1, MPI_INTEGER, neighbors(5), 0, &
-                 grid_comm, status, ierr)
+    !send_count(:) = count(mask(:)) ! FIXME: remove
+    do n = 1, 26
+       if (debug) then
+          if (neighbors(n) == global_rank .and. send_count(n) > 0) then
+             ! self migration shouldn't happen due to PBC removal
+             write (*,"(a,i0,a)") &
+                "[", global_rank, "] Warning: self migration encountered"
+          end if
+       end if
+       call mpi_sendrecv(send_count(n), 1, MPI_INTEGER, neighbors(n), 0, &
+                         recv_count(n), 1, MPI_INTEGER, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+    end do
+    ! sort arrays to move to-be-migrated sites to the end
+    call get_sort_order(sort_order, targets, n_pos, 27)
+    targets = targets(sort_order)
+    ids = ids(sort_order)
+    positions = positions(:, sort_order)
+    velocities = velocities(:, sort_order)
+    masses = masses(sort_order)
+    xyz_species = xyz_species(sort_order)
+    species = species(sort_order)
+    xyz_species_supercell = xyz_species_supercell(sort_order)
+    species_supercell = species_supercell(sort_order)
+    fix_atom = fix_atom(:, sort_order)
+    ! resize receive arrays if needed
+    n_send = sum(send_count)
+    n_recv = sum(recv_count)
+    n = n_sites - n_send + n_recv
+    if (size(ids) < n) then
+       n = 2 * size(ids)
+       allocate(buffer_ids(n))
+       buffer_ids(1:n_sites) = ids(1:n_sites)
+       call move_alloc(buffer_ids, ids)
+       allocate(buffer_positions(3, n))
+       buffer_positions(1:3, 1:n_pos) = positions(1:3, 1:n_pos)
+       call move_alloc(buffer_positions, positions)
+       allocate(buffer_velocities(3, n))
+       buffer_velocities(1:3, 1:n_pos) = velocities(1:3, 1:n_pos)
+       call move_alloc(buffer_velocities, velocities)
+       allocate(buffer_masses(n))
+       buffer_masses(1:n_sp) = masses(1:n_sp)
+       call move_alloc(buffer_masses, masses)
+       allocate(buffer_xyz_species(n))
+       buffer_xyz_species(1:n_sp) = xyz_species(1:n_sp)
+       call move_alloc(buffer_xyz_species, xyz_species)
+       allocate(buffer_species(n))
+       buffer_species(1:n_sp) = species(1:n_sp)
+       call move_alloc(buffer_species, species)
+       allocate(buffer_xyz_species_supercell(n))
+       buffer_xyz_species_supercell(1:n_sp_sc) = xyz_species_supercell(1:n_sp_sc)
+       call move_alloc(buffer_xyz_species_supercell, xyz_species_supercell)
+       allocate(buffer_species_supercell(n))
+       buffer_species_supercell(1:n_sp_sc) = species_supercell(1:n_sp_sc)
+       call move_alloc(buffer_species_supercell, species_supercell)
+       allocate(buffer_fix_atom(3, n))
+       buffer_fix_atom(1:3,1:n_sp) = fix_atom(1:3,1:n_sp)
+       call move_alloc(buffer_fix_atom, fix_atom)
+    end if
     ! allocate buffers
-    allocate(send_buffer_r(max(send_count)))
-    allocate(send_buffer_i(max(send_count)))
-    allocate(send_buffer_l(max(send_count)))
+    allocate(buffer_ids(n_send))
+    allocate(buffer_positions(3, n_send))
+    allocate(buffer_velocities(3, n_send))
+    allocate(buffer_masses(n_send))
+    allocate(buffer_xyz_species(n_send))
+    allocate(buffer_species(n_send))
+    allocate(buffer_xyz_species_supercell(n_send))
+    allocate(buffer_species_supercell(n_send))
+    allocate(buffer_fix_atom(3, n_send))
+    ! copy to-be-migrated sites to send buffers
+    s = 1 + n_pos - n_send
+    buffer_ids = ids(s:n_pos)
+    buffer_positions = positions(:, s:n_pos)
+    buffer_velocities = velocities(:, s:n_pos)
+    buffer_masses = masses(s:n_pos)
+    buffer_xyz_species = xyz_species(s:n_pos)
+    buffer_species = species(s:n_pos)
+    buffer_xyz_species_supercell = xyz_species_supercell(s:n_pos)
+    buffer_species_supercell = species_supercell(s:n_pos)
+    buffer_fix_atom = fix_atom(:, s:n_pos)
     ! migrate sites
-    send_buffer_r(:send_count(1)) = positions(mask(1))
-    mpi_sendrecv(send_buffer_r, send_count(1), MPI_DOUBLE_PRECISION, neighbors(1), 0, &
-                 positions(...), recv_count(1), MPI_DOUBLE_PRECISION, neighbors(2), 0, &
-                 grid_comm, status, ierr)
+    s = 1
+    r = 1 + n_pos - n_send
+    do n = 1, 26
+       call mpi_sendrecv(buffer_ids(s:), send_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         ids(r:), recv_count(n), &
+                         MPI_INTEGER, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_positions(1:3,s:), 3 * send_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         positions(1:3,r:), 3 * recv_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_velocities(1:3,s:), 3 * send_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         velocities(1:3,r:), 3 * recv_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_masses(s:), send_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         masses(r:), recv_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_xyz_species(s:), 8 * send_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         xyz_species(r:), 8 * recv_count(n), &
+                         MPI_CHARACTER, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_species(s:), send_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         species(r:), recv_count(n), &
+                         MPI_INTEGER, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_xyz_species_supercell(s:), 8 * send_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         xyz_species_supercell(r:), 8 * recv_count(n), &
+                         MPI_CHARACTER, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_species_supercell(s:), send_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         species_supercell(r:), recv_count(n), &
+                         MPI_INTEGER, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_fix_atom(1:3,s:), 3 * send_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         fix_atom(1:3,r:), 3 * recv_count(n), &
+                         MPI_LOGICAL, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       s = s + send_count(n)
+       r = r + recv_count(n)
+    end do
+    n_sites = n_sites - n_send + n_recv
+    n_pos = n_pos - n_send + n_recv
+    n_sp = n_sp - n_send + n_recv
+    n_sp_sc = n_sp_sc - n_send + n_recv
+    ! deallocate buffers
+    deallocate(buffer_ids)
+    deallocate(buffer_positions)
+    deallocate(buffer_velocities)
+    deallocate(buffer_masses)
+    deallocate(buffer_xyz_species)
+    deallocate(buffer_species)
+    deallocate(buffer_xyz_species_supercell)
+    deallocate(buffer_species_supercell)
+    deallocate(buffer_fix_atom)
   end subroutine
 !**************************************************************************
 
 
 
 !**************************************************************************
-  subroutine exchange(grid, surface, borders, neighbors, &
+  subroutine exchange(grid, grid_coords, surface, borders, neighbors, &
                      grid_comm, local_comm, global_rank, local_rank, &
                      n_sites, n_pos, n_sp, n_sp_sc, &
                      positions, velocities, masses, xyz_species, &
                      species, xyz_species_supercell, species_supercell, &
                      fix_atom, ids)
+    use mpi
     implicit none
 
     integer, intent(in) :: grid(3)
+    integer, intent(in) :: grid_coords(:,:)
     real*8, intent(in) :: surface(3,3)
     real*8, intent(in) :: borders(:,:)
     integer, intent(in) :: neighbors(6)
@@ -571,18 +795,20 @@ subroutine migration_mask(mask, border, norm, n_pos)
     integer, intent(in) :: ids(n_sites)
 
     real*8 :: norm(n_pos, 3)
-    integer :: i, j, n
+    integer :: i, j, n, ierr
     real*8 :: local_border(6)
     logical :: mask(6, n_pos)
     integer :: send_count(6)
     integer :: recv_count(6)
     integer :: status(MPI_STATUS_SIZE)
 
-    call domain_borders(local_border, grid_borders, grid_coords, global_rank)
+    call domain_borders(local_border, borders, grid_coords, global_rank)
     call vectorised_projection(norm, surface, positions, n_sites)
     call migration_mask(mask, local_border, norm, n_pos) ! FIXME: border shift
 
-    send_count(:) = count(mask(:))
+    do i = 1, 6
+       send_count(i) = count(mask(i,:))
+    end do
 
     ! note: for domain (i, j, k)
     !   neighbors(1) -> (i-1, j, k)
@@ -592,24 +818,24 @@ subroutine migration_mask(mask, border, norm, n_pos)
     !   neighbors(6) -> (i, j, k+1)
 
     ! how many ghost sites to send / receive?
-    mpi_sendrecv(send_count(1), 1, MPI_INTEGER, neighbors(1), 0, &
-                 recv_count(2), 1, MPI_INTEGER, neighbors(2), 0, &
-                 grid_comm, status, ierr)
-    mpi_sendrecv(send_count(2), 1, MPI_INTEGER, neighbors(2), 0, &
-                 recv_count(1), 1, MPI_INTEGER, neighbors(1), 0, &
-                 grid_comm, status, ierr)
-    mpi_sendrecv(send_count(3), 1, MPI_INTEGER, neighbors(3), 0, &
-                 recv_count(4), 1, MPI_INTEGER, neighbors(4), 0, &
-                 grid_comm, status, ierr)
-    mpi_sendrecv(send_count(4), 1, MPI_INTEGER, neighbors(4), 0, &
-                 recv_count(3), 1, MPI_INTEGER, neighbors(3), 0, &
-                 grid_comm, status, ierr)
-    mpi_sendrecv(send_count(5), 1, MPI_INTEGER, neighbors(5), 0, &
-                 recv_count(6), 1, MPI_INTEGER, neighbors(6), 0, &
-                 grid_comm, status, ierr)
-    mpi_sendrecv(send_count(6), 1, MPI_INTEGER, neighbors(6), 0, &
-                 recv_count(5), 1, MPI_INTEGER, neighbors(5), 0, &
-                 grid_comm, status, ierr)
+    call mpi_sendrecv(send_count(1), 1, MPI_INTEGER, neighbors(1), 0, &
+                      recv_count(2), 1, MPI_INTEGER, neighbors(2), 0, &
+                      grid_comm, status, ierr)
+    call mpi_sendrecv(send_count(2), 1, MPI_INTEGER, neighbors(2), 0, &
+                      recv_count(1), 1, MPI_INTEGER, neighbors(1), 0, &
+                      grid_comm, status, ierr)
+    call mpi_sendrecv(send_count(3), 1, MPI_INTEGER, neighbors(3), 0, &
+                      recv_count(4), 1, MPI_INTEGER, neighbors(4), 0, &
+                      grid_comm, status, ierr)
+    call mpi_sendrecv(send_count(4), 1, MPI_INTEGER, neighbors(4), 0, &
+                      recv_count(3), 1, MPI_INTEGER, neighbors(3), 0, &
+                      grid_comm, status, ierr)
+    call mpi_sendrecv(send_count(5), 1, MPI_INTEGER, neighbors(5), 0, &
+                      recv_count(6), 1, MPI_INTEGER, neighbors(6), 0, &
+                      grid_comm, status, ierr)
+    call mpi_sendrecv(send_count(6), 1, MPI_INTEGER, neighbors(6), 0, &
+                      recv_count(5), 1, MPI_INTEGER, neighbors(5), 0, &
+                      grid_comm, status, ierr)
     ! allocate buffers
     allocate(send_buffer_r(max(send_count)))
     allocate(send_buffer_i(max(send_count)))

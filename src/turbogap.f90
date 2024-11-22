@@ -154,8 +154,13 @@ program turbogap
   real*8 :: cell(3:3), cell_origo(3)
   integer, allocatable :: color(:), grid_coords(:,:), grid_root(:,:,:), &
                           placement(:), sort_order(:)
-  integer, allocatable :: global_ids(:), ids(:)
-  real*8, allocatable :: buffer_positions(:,:), buffer_velocities(:,:)
+  integer, allocatable :: ids(:), buffer_ids(:), global_ids(:)
+  real*8, allocatable :: buffer_positions(:,:), buffer_velocities(:,:), &
+                         buffer_masses(:)
+  integer, allocatable :: buffer_species(:), buffer_species_supercell(:)
+  logical, allocatable :: buffer_fix_atom(:,:)
+  character*8, allocatable :: buffer_xyz_species(:), &
+                              buffer_xyz_species_supercell(:)
   real*8, allocatable :: global_positions(:,:), global_velocities(:,:), &
                          global_masses(:)
   integer, allocatable :: global_species(:), global_species_supercell(:)
@@ -164,7 +169,7 @@ program turbogap
                               global_xyz_species_supercell(:)
   integer :: local_comm, global_comm, grid_comm
   integer :: local_rank, local_ntasks, global_rank, global_ntasks
-  integer :: grid_neighbor(6)
+  integer :: grid_neighbor(26)
   logical :: grid_periodic(3) = (/ .true., .true., .true. /)
   integer :: grid_dims
   real*8, allocatable :: grid_borders(:,:)
@@ -1072,14 +1077,16 @@ program turbogap
         if (allocated(fix_atom)) deallocate(fix_atom)
         allocate(fix_atom(1:3,1:n_sp + n_sites_ghost))
         if (allocated(ids)) deallocate(ids)
-        allocate(ids(1:n_sites))
+        allocate(ids(1:n_sites + n_sites_ghost))
      else if (params%do_dd .and. md_istep /= 0) then
         ! FIXME: shift positions to remove out-of-box sites due to PBC
         ! migrate out-of-cell sites between domains
-        migrate(params%dd_grid, grid_surface, grid_borders, grid_neighbor, &
-                grid_comm, n_sites, n_pos, n_sp, n_sp_sc, positions, &
-                velocities, masses, xyz_species, species, &
-                xyz_species_supercell, species_supercell, fix_atom, ids)
+        call migrate(params%dd_grid, grid_coords, grid_surface, grid_borders, &
+                     grid_neighbor, grid_comm, local_comm, global_rank, &
+                     local_rank, n_sites, n_pos, n_sp, n_sp_sc, ids, &
+                     positions, velocities, masses, xyz_species, species, &
+                     xyz_species_supercell, species_supercell, fix_atom, &
+                     params%dd_debug)
         ! reallocate arrays
      else
         call cpu_time(time_mpi(1))
@@ -1158,6 +1165,7 @@ program turbogap
            end if
            ! domain local
            call cpu_time(time_grid_local(1))
+           call mpi_bcast(ids, n_sites, MPI_INTEGER, 0, local_comm, ierr)
            call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
            call mpi_bcast(velocities, 3*n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
            call mpi_bcast(masses, n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
@@ -1184,7 +1192,19 @@ program turbogap
               end if
            end if
         else
-          ! ??
+           call cpu_time(time_grid_local(1))
+           call mpi_bcast(ids, n_sites, MPI_INTEGER, 0, local_comm, ierr)
+           call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+           call mpi_bcast(velocities, 3*n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+           call mpi_bcast(masses, n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+           call mpi_bcast(fix_atom, 3*n_sp, MPI_LOGICAL, 0, local_comm, ierr)
+           call mpi_bcast(xyz_species, 8*n_sp, MPI_CHARACTER, 0, local_comm, ierr)
+           call mpi_bcast(xyz_species_supercell, 8*n_sp_sc, MPI_CHARACTER, 0, local_comm, ierr)
+           call mpi_bcast(species, n_sp, MPI_INTEGER, 0, local_comm, ierr)
+           call mpi_bcast(species_supercell, n_sp_sc, MPI_INTEGER, 0, local_comm, ierr)
+           call cpu_time(time_grid_local(2))
+           time_grid_local(3) = time_grid_local(3) &
+                              + time_grid_local(2) - time_grid_local(1)
         end if
      else
         call cpu_time(time_mpi_positions(1))
