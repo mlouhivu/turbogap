@@ -545,7 +545,7 @@ subroutine exchange_mask(mask, border, norm, n_pos)
 
 
 !**************************************************************************
-  subroutine migrate(grid, grid_coords, surface, borders, neighbors, &
+  subroutine migrate(n_alloc, grid, grid_coords, surface, borders, neighbors, &
                      grid_comm, local_comm, global_rank, local_rank, &
                      n_sites, n_pos, n_sp, n_sp_sc, &
                      ids, positions, velocities, masses, xyz_species, &
@@ -554,6 +554,7 @@ subroutine exchange_mask(mask, border, norm, n_pos)
     use mpi
     implicit none
 
+    integer, intent(out) :: n_alloc
     integer, intent(in) :: grid(3)
     integer, intent(in) :: grid_coords(:,:)
     real*8, intent(in) :: surface(3,3)
@@ -610,7 +611,6 @@ subroutine exchange_mask(mask, border, norm, n_pos)
     call migration_targets(targets, send_count, neighbors, mask, n_pos)
 
     ! how many sites to migrate?
-    !send_count(:) = count(mask(:)) ! FIXME: remove
     do n = 1, 26
        if (debug) then
           if (neighbors(n) == global_rank .and. send_count(n) > 0) then
@@ -638,36 +638,38 @@ subroutine exchange_mask(mask, border, norm, n_pos)
     ! resize receive arrays if needed
     n_send = sum(send_count)
     n_recv = sum(recv_count)
-    n = n_sites - n_send + n_recv
-    if (size(ids) < n) then
-       n = 2 * size(ids)
-       allocate(buffer_ids(n))
+    n_alloc = n_sites - n_send + n_recv
+    if (size(ids) < n_alloc) then
+       n_alloc = 2 * size(ids)
+       allocate(buffer_ids(n_alloc))
        buffer_ids(1:n_sites) = ids(1:n_sites)
        call move_alloc(buffer_ids, ids)
-       allocate(buffer_positions(3, n))
+       allocate(buffer_positions(3, n_alloc))
        buffer_positions(1:3, 1:n_pos) = positions(1:3, 1:n_pos)
        call move_alloc(buffer_positions, positions)
-       allocate(buffer_velocities(3, n))
+       allocate(buffer_velocities(3, n_alloc))
        buffer_velocities(1:3, 1:n_pos) = velocities(1:3, 1:n_pos)
        call move_alloc(buffer_velocities, velocities)
-       allocate(buffer_masses(n))
+       allocate(buffer_masses(n_alloc))
        buffer_masses(1:n_sp) = masses(1:n_sp)
        call move_alloc(buffer_masses, masses)
-       allocate(buffer_xyz_species(n))
+       allocate(buffer_xyz_species(n_alloc))
        buffer_xyz_species(1:n_sp) = xyz_species(1:n_sp)
        call move_alloc(buffer_xyz_species, xyz_species)
-       allocate(buffer_species(n))
+       allocate(buffer_species(n_alloc))
        buffer_species(1:n_sp) = species(1:n_sp)
        call move_alloc(buffer_species, species)
-       allocate(buffer_xyz_species_supercell(n))
+       allocate(buffer_xyz_species_supercell(n_alloc))
        buffer_xyz_species_supercell(1:n_sp_sc) = xyz_species_supercell(1:n_sp_sc)
        call move_alloc(buffer_xyz_species_supercell, xyz_species_supercell)
-       allocate(buffer_species_supercell(n))
+       allocate(buffer_species_supercell(n_alloc))
        buffer_species_supercell(1:n_sp_sc) = species_supercell(1:n_sp_sc)
        call move_alloc(buffer_species_supercell, species_supercell)
-       allocate(buffer_fix_atom(3, n))
+       allocate(buffer_fix_atom(3, n_alloc))
        buffer_fix_atom(1:3,1:n_sp) = fix_atom(1:3,1:n_sp)
        call move_alloc(buffer_fix_atom, fix_atom)
+    else
+       n_alloc = 0
     end if
     ! allocate buffers
     allocate(buffer_ids(n_send))

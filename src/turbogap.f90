@@ -150,7 +150,7 @@ program turbogap
   logical, allocatable :: compress_soap_mpi(:)
 
   ! Domain decomposition
-  integer :: n_sites_global, n_sites_ghost
+  integer :: n_sites_global, n_sites_ghost, n_alloc
   real*8 :: cell(3:3), cell_origo(3)
   integer, allocatable :: color(:), grid_coords(:,:), grid_root(:,:,:), &
                           placement(:), sort_order(:)
@@ -1084,13 +1084,40 @@ program turbogap
      else if (params%do_dd .and. md_istep /= 0) then
         ! FIXME: shift positions to remove out-of-box sites due to PBC
         ! migrate out-of-cell sites between domains
-        call migrate(params%dd_grid, grid_coords, grid_surface, grid_borders, &
-                     grid_neighbor, grid_comm, local_comm, global_rank, &
-                     local_rank, n_sites, n_pos, n_sp, n_sp_sc, ids, &
-                     positions, velocities, masses, xyz_species, species, &
-                     xyz_species_supercell, species_supercell, fix_atom, &
-                     params%dd_debug)
-        ! reallocate arrays
+        if (local_rank == 0) then
+           call migrate(n_alloc, params%dd_grid, grid_coords, grid_surface, &
+                        grid_borders, grid_neighbor, grid_comm, local_comm, &
+                        global_rank, local_rank, n_sites, n_pos, n_sp, &
+                        n_sp_sc, ids, positions, velocities, masses, &
+                        xyz_species, species, xyz_species_supercell, &
+                        species_supercell, fix_atom, params%dd_debug)
+        end if
+        call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, local_comm, ierr)
+        call mpi_bcast(n_pos, 1, MPI_INTEGER, 0, local_comm, ierr)
+        call mpi_bcast(n_sp, 1, MPI_INTEGER, 0, local_comm, ierr)
+        call mpi_bcast(n_sp_sc, 1, MPI_INTEGER, 0, local_comm, ierr)
+        call mpi_bcast(n_alloc, 1, MPI_INTEGER, 0, local_comm, ierr)
+        if (n_alloc > 0 .and. local_rank /= 0) then
+           ! reallocate arrays to match the new size
+           deallocate(ids)
+           deallocate(positions)
+           deallocate(velocities)
+           deallocate(masses)
+           deallocate(xyz_species)
+           deallocate(species)
+           deallocate(xyz_species_supercell)
+           deallocate(species_supercell)
+           deallocate(fix_atom)
+           allocate(ids(n_alloc))
+           allocate(positions(3, n_alloc))
+           allocate(velocities(3, n_alloc))
+           allocate(masses(n_alloc))
+           allocate(xyz_species(n_alloc))
+           allocate(species(n_alloc))
+           allocate(xyz_species_supercell(n_alloc))
+           allocate(species_supercell(n_alloc))
+           allocate(fix_atom(3, n_alloc))
+        end if
      else
         call cpu_time(time_mpi(1))
         call mpi_bcast(n_pos, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
