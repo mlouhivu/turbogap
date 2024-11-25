@@ -579,15 +579,15 @@ subroutine exchange_mask(mask, border, norm, n_pos)
     logical, intent(inout), allocatable :: fix_atom(:,:)
     logical, intent(in) :: debug
 
-    real*8 :: norm(n_pos, 3)
+    real*8 :: norm(n_sites, 3)
     integer :: n, s, r, ierr
     integer :: n_recv, n_send
     real*8 :: local_border(6)
-    logical :: mask(0:26, n_pos)
+    logical :: mask(0:26, n_sites)
     integer :: send_count(26)
     integer :: recv_count(26)
     integer :: status(MPI_STATUS_SIZE)
-    integer :: targets(n_pos)
+    integer :: targets(n_sites)
     integer, allocatable :: sort_order(:)
     integer, allocatable :: buffer_ids(:)
     real*8, allocatable :: buffer_positions(:,:)
@@ -604,11 +604,11 @@ subroutine exchange_mask(mask, border, norm, n_pos)
 
     call domain_borders(local_border, borders, grid_coords, global_rank)
     call vectorised_projection(norm, surface, positions, n_sites)
-    call migration_mask(mask, local_border, norm, n_pos)
+    call migration_mask(mask, local_border, norm, n_sites)
     if (debug) then
-       call check_migration_mask(mask, n_pos)
+       call check_migration_mask(mask, n_sites)
     end if
-    call migration_targets(targets, send_count, neighbors, mask, n_pos)
+    call migration_targets(targets, send_count, neighbors, mask, n_sites)
 
     ! how many sites to migrate?
     do n = 1, 26
@@ -624,17 +624,18 @@ subroutine exchange_mask(mask, border, norm, n_pos)
                          grid_comm, status, ierr)
     end do
     ! sort arrays to move to-be-migrated sites to the end
-    call get_sort_order(sort_order, targets, n_pos, 27)
-    targets = targets(sort_order)
-    ids = ids(sort_order)
-    positions = positions(:, sort_order)
-    velocities = velocities(:, sort_order)
-    masses = masses(sort_order)
-    xyz_species = xyz_species(sort_order)
-    species = species(sort_order)
-    xyz_species_supercell = xyz_species_supercell(sort_order)
-    species_supercell = species_supercell(sort_order)
-    fix_atom = fix_atom(:, sort_order)
+    allocate(sort_order(n_sites))
+    call get_sort_order(sort_order, targets, n_sites, 27)
+    targets(1:n_sites) = targets(sort_order)
+    ids(1:n_sites) = ids(sort_order)
+    positions(1:3, 1:n_pos) = positions(1:3, sort_order)
+    velocities(1:3, 1:n_pos) = velocities(1:3, sort_order)
+    masses(1:n_sp) = masses(sort_order)
+    xyz_species(1:n_sp) = xyz_species(sort_order)
+    species(1:n_sp) = species(sort_order)
+    xyz_species_supercell(1:n_sp_sc) = xyz_species_supercell(sort_order)
+    species_supercell(1:n_sp_sc) = species_supercell(sort_order)
+    fix_atom(1:3, 1:n_sp) = fix_atom(1:3, sort_order)
     ! resize receive arrays if needed
     n_send = sum(send_count)
     n_recv = sum(recv_count)
@@ -682,19 +683,19 @@ subroutine exchange_mask(mask, border, norm, n_pos)
     allocate(buffer_species_supercell(n_send))
     allocate(buffer_fix_atom(3, n_send))
     ! copy to-be-migrated sites to send buffers
-    s = 1 + n_pos - n_send
-    buffer_ids = ids(s:n_pos)
-    buffer_positions = positions(:, s:n_pos)
-    buffer_velocities = velocities(:, s:n_pos)
-    buffer_masses = masses(s:n_pos)
-    buffer_xyz_species = xyz_species(s:n_pos)
-    buffer_species = species(s:n_pos)
-    buffer_xyz_species_supercell = xyz_species_supercell(s:n_pos)
-    buffer_species_supercell = species_supercell(s:n_pos)
-    buffer_fix_atom = fix_atom(:, s:n_pos)
+    s = 1 + n_sites - n_send
+    buffer_ids(1:n_send) = ids(s:n_sites)
+    buffer_positions(1:3, 1:n_send) = positions(1:3, s:n_pos)
+    buffer_velocities(1:3, 1:n_send) = velocities(1:3, s:n_pos)
+    buffer_masses(1:n_send) = masses(s:n_sp)
+    buffer_xyz_species(1:n_send) = xyz_species(s:n_sp)
+    buffer_species(1:n_send) = species(s:n_sp)
+    buffer_xyz_species_supercell(1:n_send) = xyz_species_supercell(s:n_sp_sc)
+    buffer_species_supercell(1:n_send) = species_supercell(s:n_sp_sc)
+    buffer_fix_atom(1:3, 1:n_send) = fix_atom(1:3, s:n_sp)
     ! migrate sites
     s = 1
-    r = 1 + n_pos - n_send
+    r = 1 + n_sites - n_send
     do n = 1, 26
        call mpi_sendrecv(buffer_ids(s:), send_count(n), &
                          MPI_DOUBLE_PRECISION, neighbors(n), 0, &
@@ -839,14 +840,14 @@ subroutine exchange_mask(mask, border, norm, n_pos)
                       recv_count(5), 1, MPI_INTEGER, neighbors(5), 0, &
                       grid_comm, status, ierr)
     ! allocate buffers
-    allocate(send_buffer_r(max(send_count)))
-    allocate(send_buffer_i(max(send_count)))
-    allocate(send_buffer_l(max(send_count)))
+!    allocate(send_buffer_r(max(send_count)))
+!    allocate(send_buffer_i(max(send_count)))
+!    allocate(send_buffer_l(max(send_count)))
     ! halo exchange
-    send_buffer_r(:send_count(1)) = positions(mask(1))
-    mpi_sendrecv(send_buffer_r, send_count(1), MPI_DOUBLE_PRECISION, neighbors(1), 0, &
-                 positions(...), recv_count(1), MPI_DOUBLE_PRECISION, neighbors(2), 0, &
-                 grid_comm, status, ierr)
+!    send_buffer_r(:send_count(1)) = positions(mask(1))
+!    mpi_sendrecv(send_buffer_r, send_count(1), MPI_DOUBLE_PRECISION, neighbors(1), 0, &
+!                 positions(...), recv_count(1), MPI_DOUBLE_PRECISION, neighbors(2), 0, &
+!                 grid_comm, status, ierr)
   end subroutine
 !**************************************************************************
 
