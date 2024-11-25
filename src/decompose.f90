@@ -499,23 +499,30 @@ subroutine migration_mask(mask, border, norm, n_pos)
 
 
 !**************************************************************************
-  subroutine migration_targets(targets, send_count, neighbors, mask, n_pos)
+  subroutine migration_targets(targets, send_count, neighbors, mask, n_sites, &
+                               global_rank)
     implicit none
-    integer, intent(out) :: targets(n_pos)
+    integer, intent(out) :: targets(n_sites)
     integer, intent(out) :: send_count(26)
     integer, intent(in) :: neighbors(26)
-    logical, intent(in) :: mask(0:26, n_pos)
-    integer, intent(in) :: n_pos
+    logical, intent(in) :: mask(0:26, n_sites)
+    integer, intent(in) :: n_sites
+    integer, intent(in) :: global_rank
 
     integer :: i, n
+    logical :: self(26)
+
+    self(:) = (neighbors(:) == global_rank)
 
     targets = 0
     send_count = 0
-    do i = 1, n_pos
+    do i = 1, n_sites
        do n = 1, 26
           if (mask(n,i)) then
-             targets(i) = n
-             send_count(n) = send_count(n) + 1
+             if (.not. self(n)) then
+                targets(i) = n
+                send_count(n) = send_count(n) + 1
+             end if
              exit
           end if
        end do
@@ -608,17 +615,11 @@ subroutine exchange_mask(mask, border, norm, n_pos)
     if (debug) then
        call check_migration_mask(mask, n_sites)
     end if
-    call migration_targets(targets, send_count, neighbors, mask, n_sites)
+    call migration_targets(targets, send_count, neighbors, mask, n_sites, &
+                           global_rank)
 
     ! how many sites to migrate?
     do n = 1, 26
-       if (debug) then
-          if (neighbors(n) == global_rank .and. send_count(n) > 0) then
-             ! self migration shouldn't happen due to PBC removal
-             write (*,"(a,i0,a)") &
-                "[", global_rank, "] Warning: self migration encountered"
-          end if
-       end if
        call mpi_sendrecv(send_count(n), 1, MPI_INTEGER, neighbors(n), 0, &
                          recv_count(n), 1, MPI_INTEGER, neighbors(n), 0, &
                          grid_comm, status, ierr)
