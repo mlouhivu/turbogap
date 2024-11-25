@@ -698,7 +698,7 @@ subroutine exchange_mask(mask, border, norm, n_pos)
     r = 1 + n_sites - n_send
     do n = 1, 26
        call mpi_sendrecv(buffer_ids(s:), send_count(n), &
-                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         MPI_INTEGER, neighbors(n), 0, &
                          ids(r:), recv_count(n), &
                          MPI_INTEGER, neighbors(n), 0, &
                          grid_comm, status, ierr)
@@ -718,27 +718,27 @@ subroutine exchange_mask(mask, border, norm, n_pos)
                          MPI_DOUBLE_PRECISION, neighbors(n), 0, &
                          grid_comm, status, ierr)
        call mpi_sendrecv(buffer_xyz_species(s:), 8 * send_count(n), &
-                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         MPI_CHARACTER, neighbors(n), 0, &
                          xyz_species(r:), 8 * recv_count(n), &
                          MPI_CHARACTER, neighbors(n), 0, &
                          grid_comm, status, ierr)
        call mpi_sendrecv(buffer_species(s:), send_count(n), &
-                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         MPI_INTEGER, neighbors(n), 0, &
                          species(r:), recv_count(n), &
                          MPI_INTEGER, neighbors(n), 0, &
                          grid_comm, status, ierr)
        call mpi_sendrecv(buffer_xyz_species_supercell(s:), 8 * send_count(n), &
-                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         MPI_CHARACTER, neighbors(n), 0, &
                          xyz_species_supercell(r:), 8 * recv_count(n), &
                          MPI_CHARACTER, neighbors(n), 0, &
                          grid_comm, status, ierr)
        call mpi_sendrecv(buffer_species_supercell(s:), send_count(n), &
-                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         MPI_INTEGER, neighbors(n), 0, &
                          species_supercell(r:), recv_count(n), &
                          MPI_INTEGER, neighbors(n), 0, &
                          grid_comm, status, ierr)
        call mpi_sendrecv(buffer_fix_atom(1:3,s:), 3 * send_count(n), &
-                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         MPI_LOGICAL, neighbors(n), 0, &
                          fix_atom(1:3,r:), 3 * recv_count(n), &
                          MPI_LOGICAL, neighbors(n), 0, &
                          grid_comm, status, ierr)
