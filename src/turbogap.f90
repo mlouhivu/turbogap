@@ -1082,7 +1082,6 @@ program turbogap
         if (allocated(ids)) deallocate(ids)
         allocate(ids(1:n_sites + n_sites_ghost))
      else if (params%do_dd .and. md_istep /= 0) then
-        ! FIXME: shift positions to remove out-of-box sites due to PBC
         ! migrate out-of-cell sites between domains
         if (local_rank == 0) then
            call migrate(n_alloc, params%dd_grid, grid_coords, grid_surface, &
