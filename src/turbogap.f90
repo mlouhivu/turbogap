@@ -1192,20 +1192,6 @@ program turbogap
                  end if
               end if
            end if
-           ! domain local
-           call cpu_time(time_grid_local(1))
-           call mpi_bcast(ids, n_sites, MPI_INTEGER, 0, local_comm, ierr)
-           call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
-           call mpi_bcast(velocities, 3*n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
-           call mpi_bcast(masses, n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
-           call mpi_bcast(fix_atom, 3*n_sp, MPI_LOGICAL, 0, local_comm, ierr)
-           call mpi_bcast(xyz_species, 8*n_sp, MPI_CHARACTER, 0, local_comm, ierr)
-           call mpi_bcast(xyz_species_supercell, 8*n_sp_sc, MPI_CHARACTER, 0, local_comm, ierr)
-           call mpi_bcast(species, n_sp, MPI_INTEGER, 0, local_comm, ierr)
-           call mpi_bcast(species_supercell, n_sp_sc, MPI_INTEGER, 0, local_comm, ierr)
-           call cpu_time(time_grid_local(2))
-           time_grid_local(3) = time_grid_local(3) &
-                              + time_grid_local(2) - time_grid_local(1)
            ! global
            call cpu_time(time_mpi_positions(1))
            call mpi_bcast(indices, 3, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
@@ -1215,25 +1201,34 @@ program turbogap
            call cpu_time(time_mpi_positions(2))
            time_mpi_positions(3) = time_mpi_positions(3) &
                                  + time_mpi_positions(2) - time_mpi_positions(1)
-           if (local_rank == 0 .and. global_rank == 0) then
-              if (params%dd_debug) then
-                 write(*,*) "time(grid_local):", time_grid_local(3)
-              end if
+        end if
+        ! halo exchange
+        if (local_rank == 0) then
+           call exchange(n_alloc, params%dd_grid, grid_coords, grid_surface, &
+                         grid_borders, grid_neighbor, grid_comm, local_comm, &
+                         global_rank, local_rank, n_sites, n_pos, n_sp, &
+                         n_sp_sc, ids, positions, velocities, masses, &
+                         xyz_species, species, xyz_species_supercell, &
+                         species_supercell, fix_atom, params%dd_debug)
+        end if
+        ! domain local
+        call cpu_time(time_grid_local(1))
+        call mpi_bcast(ids, n_sites, MPI_INTEGER, 0, local_comm, ierr)
+        call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+        call mpi_bcast(velocities, 3*n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+        call mpi_bcast(masses, n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+        call mpi_bcast(fix_atom, 3*n_sp, MPI_LOGICAL, 0, local_comm, ierr)
+        call mpi_bcast(xyz_species, 8*n_sp, MPI_CHARACTER, 0, local_comm, ierr)
+        call mpi_bcast(xyz_species_supercell, 8*n_sp_sc, MPI_CHARACTER, 0, local_comm, ierr)
+        call mpi_bcast(species, n_sp, MPI_INTEGER, 0, local_comm, ierr)
+        call mpi_bcast(species_supercell, n_sp_sc, MPI_INTEGER, 0, local_comm, ierr)
+        call cpu_time(time_grid_local(2))
+        time_grid_local(3) = time_grid_local(3) &
+                           + time_grid_local(2) - time_grid_local(1)
+        if (local_rank == 0 .and. global_rank == 0) then
+           if (params%dd_debug) then
+              write(*,*) "time(grid_local):", time_grid_local(3)
            end if
-        else
-           call cpu_time(time_grid_local(1))
-           call mpi_bcast(ids, n_sites, MPI_INTEGER, 0, local_comm, ierr)
-           call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
-           call mpi_bcast(velocities, 3*n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
-           call mpi_bcast(masses, n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
-           call mpi_bcast(fix_atom, 3*n_sp, MPI_LOGICAL, 0, local_comm, ierr)
-           call mpi_bcast(xyz_species, 8*n_sp, MPI_CHARACTER, 0, local_comm, ierr)
-           call mpi_bcast(xyz_species_supercell, 8*n_sp_sc, MPI_CHARACTER, 0, local_comm, ierr)
-           call mpi_bcast(species, n_sp, MPI_INTEGER, 0, local_comm, ierr)
-           call mpi_bcast(species_supercell, n_sp_sc, MPI_INTEGER, 0, local_comm, ierr)
-           call cpu_time(time_grid_local(2))
-           time_grid_local(3) = time_grid_local(3) &
-                              + time_grid_local(2) - time_grid_local(1)
         end if
      else
         call cpu_time(time_mpi_positions(1))
