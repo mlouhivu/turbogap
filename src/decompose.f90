@@ -779,7 +779,7 @@ subroutine exchange_mask(mask, border, norm, n_pos)
     integer, intent(in) :: grid_coords(:,:)
     real*8, intent(in) :: surface(3,3)
     real*8, intent(in) :: borders(:,:)
-    integer, intent(in) :: neighbors(6)
+    integer, intent(in) :: neighbors(26)
     integer, intent(in) :: grid_comm
     integer, intent(in) :: local_comm
     integer, intent(in) :: global_rank
@@ -800,55 +800,130 @@ subroutine exchange_mask(mask, border, norm, n_pos)
 
     real*8 :: norm(n_pos, 3)
     integer :: i, j, n, ierr
+    integer :: n_recv, n_send
     real*8 :: local_border(6)
-    logical :: mask(6, n_pos)
+    logical :: mask(0:26, n_sites)
     integer :: send_count(6)
     integer :: recv_count(6)
     integer :: status(MPI_STATUS_SIZE)
+    integer, allocatable :: buffer_ids(:)
+    real*8, allocatable :: buffer_positions(:,:)
+    real*8, allocatable :: buffer_velocities(:,:)
+    real*8, allocatable :: buffer_masses(:)
+    integer, allocatable :: buffer_species(:)
+    integer, allocatable :: buffer_species_supercell(:)
+    logical, allocatable :: buffer_fix_atom(:,:)
+    character*8, allocatable :: buffer_xyz_species(:)
+    character*8, allocatable :: buffer_xyz_species_supercell(:)
 
     call domain_borders(local_border, borders, grid_coords, global_rank)
     call vectorised_projection(norm, surface, positions, n_sites)
-    call migration_mask(mask, local_border, norm, n_pos) ! FIXME: border shift
+    call migration_mask(mask, local_border, norm, n_sites)
+    if (debug) then
+       call check_migration_mask(mask, n_sites)
+    end if
 
     do i = 1, 6
        send_count(i) = count(mask(i,:))
     end do
 
-    ! note: for domain (i, j, k)
-    !   neighbors(1) -> (i-1, j, k)
-    !   neighbors(2) -> (i+1, j, k)
-    !   neighbors(3) -> (i, j-1, k)
-    !     ...
-    !   neighbors(6) -> (i, j, k+1)
-
     ! how many ghost sites to send / receive?
-    call mpi_sendrecv(send_count(1), 1, MPI_INTEGER, neighbors(1), 0, &
-                      recv_count(2), 1, MPI_INTEGER, neighbors(2), 0, &
-                      grid_comm, status, ierr)
-    call mpi_sendrecv(send_count(2), 1, MPI_INTEGER, neighbors(2), 0, &
-                      recv_count(1), 1, MPI_INTEGER, neighbors(1), 0, &
-                      grid_comm, status, ierr)
-    call mpi_sendrecv(send_count(3), 1, MPI_INTEGER, neighbors(3), 0, &
-                      recv_count(4), 1, MPI_INTEGER, neighbors(4), 0, &
-                      grid_comm, status, ierr)
-    call mpi_sendrecv(send_count(4), 1, MPI_INTEGER, neighbors(4), 0, &
-                      recv_count(3), 1, MPI_INTEGER, neighbors(3), 0, &
-                      grid_comm, status, ierr)
-    call mpi_sendrecv(send_count(5), 1, MPI_INTEGER, neighbors(5), 0, &
-                      recv_count(6), 1, MPI_INTEGER, neighbors(6), 0, &
-                      grid_comm, status, ierr)
-    call mpi_sendrecv(send_count(6), 1, MPI_INTEGER, neighbors(6), 0, &
-                      recv_count(5), 1, MPI_INTEGER, neighbors(5), 0, &
-                      grid_comm, status, ierr)
+    do n = 1, 6
+       call mpi_sendrecv(send_count(n), 1, MPI_INTEGER, neighbors(n), 0, &
+                         recv_count(n), 1, MPI_INTEGER, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+    end do
+    n_send = sum(send_count)
+    n_recv = sum(recv_count)
     ! allocate buffers
-!    allocate(send_buffer_r(max(send_count)))
-!    allocate(send_buffer_i(max(send_count)))
-!    allocate(send_buffer_l(max(send_count)))
+    allocate(buffer_ids(n_send))
+    allocate(buffer_positions(3, n_send))
+    allocate(buffer_velocities(3, n_send))
+    allocate(buffer_masses(n_send))
+    allocate(buffer_xyz_species(n_send))
+    allocate(buffer_species(n_send))
+    allocate(buffer_xyz_species_supercell(n_send))
+    allocate(buffer_species_supercell(n_send))
+    allocate(buffer_fix_atom(3, n_send))
+    ! copy ghost sites to send buffers
+    s = 1
+    e = 0
+    do n = 1, 6
+       e = e + send(n)
+       buffer_ids(s:e) = ids(mask(n))
+       buffer_positions(1:3, s:e) = positions(1:3, mask(n))
+       buffer_velocities(1:3, s:e) = velocities(1:3, mask(n))
+       buffer_masses(s:e) = masses(mask(n))
+       buffer_xyz_species(s:e) = xyz_species(mask(n))
+       buffer_species(s:e) = species(mask(n))
+       buffer_xyz_species_supercell(s:e) = xyz_species_supercell(mask(n))
+       buffer_species_supercell(s:e) = species_supercell(mask(n))
+       buffer_fix_atom(1:3, s:e) = fix_atom(1:3, mask(n))
+       s = e + 1
+    end do
     ! halo exchange
-!    send_buffer_r(:send_count(1)) = positions(mask(1))
-!    mpi_sendrecv(send_buffer_r, send_count(1), MPI_DOUBLE_PRECISION, neighbors(1), 0, &
-!                 positions(...), recv_count(1), MPI_DOUBLE_PRECISION, neighbors(2), 0, &
-!                 grid_comm, status, ierr)
+    s = 1
+    r = 1 + n_sites
+    do n = 1, 6
+       call mpi_sendrecv(buffer_ids(s:), send_count(n), &
+                         MPI_INTEGER, neighbors(n), 0, &
+                         ids(r:), recv_count(n), &
+                         MPI_INTEGER, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_positions(1:3,s:), 3 * send_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         positions(1:3,r:), 3 * recv_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_velocities(1:3,s:), 3 * send_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         velocities(1:3,r:), 3 * recv_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_masses(s:), send_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         masses(r:), recv_count(n), &
+                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_xyz_species(s:), 8 * send_count(n), &
+                         MPI_CHARACTER, neighbors(n), 0, &
+                         xyz_species(r:), 8 * recv_count(n), &
+                         MPI_CHARACTER, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_species(s:), send_count(n), &
+                         MPI_INTEGER, neighbors(n), 0, &
+                         species(r:), recv_count(n), &
+                         MPI_INTEGER, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_xyz_species_supercell(s:), 8 * send_count(n), &
+                         MPI_CHARACTER, neighbors(n), 0, &
+                         xyz_species_supercell(r:), 8 * recv_count(n), &
+                         MPI_CHARACTER, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_species_supercell(s:), send_count(n), &
+                         MPI_INTEGER, neighbors(n), 0, &
+                         species_supercell(r:), recv_count(n), &
+                         MPI_INTEGER, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(buffer_fix_atom(1:3,s:), 3 * send_count(n), &
+                         MPI_LOGICAL, neighbors(n), 0, &
+                         fix_atom(1:3,r:), 3 * recv_count(n), &
+                         MPI_LOGICAL, neighbors(n), 0, &
+                         grid_comm, status, ierr)
+       s = s + send_count(n)
+       r = r + recv_count(n)
+    end do
+    ! FIXME: update n_sites_ghost?
+    ! deallocate buffers
+    deallocate(buffer_ids)
+    deallocate(buffer_positions)
+    deallocate(buffer_velocities)
+    deallocate(buffer_masses)
+    deallocate(buffer_xyz_species)
+    deallocate(buffer_species)
+    deallocate(buffer_xyz_species_supercell)
+    deallocate(buffer_species_supercell)
+    deallocate(buffer_fix_atom)
   end subroutine
 !**************************************************************************
 
