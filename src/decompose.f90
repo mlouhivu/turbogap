@@ -817,9 +817,11 @@ subroutine migration_mask(mask, border, norm, n_pos)
     logical, intent(in) :: fix_atom(3, n_sp)
     integer, intent(in) :: ids(n_sites)
 
-    real*8, allocatable :: norm(:,:), tmp(:,:)
-    integer :: n_norm, n_norm_old
+    real*8, allocatable :: norm(:,:), tmp_norm(:,:)
+    logical, allocatable :: mask(:,:), tmp_mask(:,:)
+    integer :: n_alloc, n_alloc_old
     integer :: i, j, n, s, e, ierr
+    integer :: src, tgt
     integer :: n_send, n_recv
     integer :: n_send_alloc=0
     integer :: n_recv_alloc=0
@@ -836,19 +838,21 @@ subroutine migration_mask(mask, border, norm, n_pos)
     character*8, allocatable :: buffer_xyz_species_supercell(:)
 
     call domain_borders(local_border, borders, grid_coords, global_rank)
-    n_norm = n_sites * 2
-    allocate(norm(n_norm, 3))
+    n_alloc = n_sites * 2
+    allocate(norm(n_alloc, 3))
     call vectorised_projection(norm, surface, positions, n_sites)
+    allocate(mask(6, n_alloc))
+    call exchange_mask(mask, local_border, norm, n_sites)
 
     do n = 1, 6
        if (mod(n,2) == 0) then
-          ! shift down
-          src = neighbors(n)
-          tgt = neighbors(n-1)
-       else
           ! shift up
-          src = neighbors(n)
-          tgt = neighbors(n+1)
+          src = neighbors(n-1)
+          tgt = neighbors(n)
+       else
+          ! shift down
+          src = neighbors(n+1)
+          tgt = neighbors(n)
        end if
        ! how many ghost sites to send / receive?
        n_send = count(mask(n,:))
@@ -893,7 +897,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
        ! copy ghost sites to send buffers
        j = 1
        do i = 1, n_sites
-          if (in_border_region(n, local_border, norm(i))) then
+          if (mask(n,i)) then
              buffer_ids(j) = ids(i)
              buffer_positions(1:3, j) = positions(1:3, i)
              buffer_velocities(1:3, j) = velocities(1:3, i)
@@ -959,18 +963,22 @@ subroutine migration_mask(mask, border, norm, n_pos)
                          grid_comm, status, ierr)
        fix_atom(1:3, s:e) = rbuffer_fix_atom(1:3, 1:n_recv)
        n_sites = n_sites + n_recv
-       ! calculate new norms
-       if (n_sites > n_norm) then
-          n_norm_old = n_norm
-          do while (n_sites > n_norm)
-             n_norm = n_norm * 2
+       ! calculate new norms and update masks
+       if (n_sites > n_alloc) then
+          n_alloc_old = n_alloc
+          do while (n_sites > n_alloc)
+             n_alloc = n_alloc * 2
           end do
-          allocate(tmp(n_norm, 3))
-          tmp(1:n_norm_old, 1:3) = norm(1:n_norm_old, 1:3)
-          move_alloc(tmp, norm)
+          allocate(tmp_norm(n_alloc, 3))
+          tmp_norm(1:n_alloc_old, 1:3) = norm(1:n_alloc_old, 1:3)
+          call move_alloc(tmp_norm, norm)
+          allocate(tmp_mask(6, n_alloc))
+          tmp_mask(1:6, 1:n_alloc_old) = mask(1:6, 1:n_alloc_old)
+          call move_alloc(tmp_mask, mask)
        end if
-       call vectorised_projection(norm(r:r + n_recv, 1:3), surface, &
-                                  positions(1:3, r:r + n_recv), n_recv)
+       call vectorised_projection(norm(s:e, 1:3), surface, &
+                                  positions(1:3, s:e), n_recv)
+       call exchange_mask(mask(1:6, s:e), local_border, norm(s:e, 1:3), n_recv)
     end do
     ! FIXME: update n_sites_ghost?
     ! deallocate buffers
