@@ -747,37 +747,39 @@ subroutine migration_mask(mask, border, norm, n_pos)
 
 
 !**************************************************************************
-  subroutine exchange_mask(mask, border, norm, n_pos)
+  subroutine exchange_mask(mask, border, norm, n, distance)
     implicit none
-    logical, intent(out) :: mask(6, n_pos)
+    logical, intent(out) :: mask(6, n)
     real*8, intent(in) :: border(6)
-    real*8, intent(in) :: norm(n_pos, 3)
-    integer, intent(in) :: n_pos
+    real*8, intent(in) :: norm(n, 3)
+    integer, intent(in) :: n
+    real*8, intent(in) :: distance
 
-    mask(1,:) = norm(:,1) <= border(1)
-    mask(2,:) = norm(:,1) > border(2)
-    mask(3,:) = norm(:,2) <= border(3)
-    mask(4,:) = norm(:,2) > border(4)
-    mask(5,:) = norm(:,3) <= border(5)
-    mask(6,:) = norm(:,3) > border(6)
+    mask(1,:) = norm(:,1) <= (border(1) + distance)
+    mask(2,:) = norm(:,1) > (border(2) - distance)
+    mask(3,:) = norm(:,2) <= (border(3) + distance)
+    mask(4,:) = norm(:,2) > (border(4) - distance)
+    mask(5,:) = norm(:,3) <= (border(5) + distance)
+    mask(6,:) = norm(:,3) > (border(6) - distance)
   end subroutine
 !**************************************************************************
 
 
 
 !**************************************************************************
-  pure logical function in_border_region(n, border, norm) result(res)
+  pure logical function in_border_region(n, border, norm, distance) result(res)
     integer, intent(in) :: n
     real*8, intent(in) :: border(6)
     real*8, intent(in) :: norm(3)
+    real*8, intent(in) :: distance
 
     integer :: axis
 
     axis = (n + 1) / 2
     if (mod(n,2) == 0) then
-       res = norm(axis) > border(n)
+       res = norm(axis) > (border(n) - distance)
     else
-       res = norm(axis) <= border(n)
+       res = norm(axis) <= (border(n) + distance)
     end if
   end function
 !**************************************************************************
@@ -787,7 +789,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
 !**************************************************************************
   subroutine halo_exchange(grid, grid_coords, surface, borders, neighbors, &
                            grid_comm, local_comm, global_rank, local_rank, &
-                           n_sites, n_pos, n_sp, n_sp_sc, &
+                           rcut_max, n_sites, n_pos, n_sp, n_sp_sc, &
                            ids, positions, velocities, masses, xyz_species, &
                            species, xyz_species_supercell, species_supercell, &
                            fix_atom, debug)
@@ -803,6 +805,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
     integer, intent(in) :: local_comm
     integer, intent(in) :: global_rank
     integer, intent(in) :: local_rank
+    real*8, intent(in) :: rcut_max
     integer, intent(inout) :: n_sites
     integer, intent(inout) :: n_pos
     integer, intent(inout) :: n_sp
@@ -843,7 +846,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
     allocate(norm(n_alloc, 3))
     call vectorised_projection(norm, surface, positions, n_sites)
     allocate(mask(6, n_alloc))
-    call exchange_mask(mask, local_border, norm, n_sites)
+    call exchange_mask(mask, local_border, norm, n_sites, rcut_max)
 
     do n = 1, 6
        if (mod(n,2) == 0) then
@@ -883,6 +886,9 @@ subroutine migration_mask(mask, border, norm, n_pos)
           allocate(buffer_xyz_species_supercell(n_send_alloc))
           allocate(buffer_species_supercell(n_send_alloc))
           allocate(buffer_fix_atom(3, n_send_alloc))
+          if (debug) then
+             write(*,*) "send buffers allocated:", n_send_alloc
+          end if
        end if
        if (n_recv_alloc < n_recv) then
           if (n_recv_alloc > 0) then
@@ -894,6 +900,9 @@ subroutine migration_mask(mask, border, norm, n_pos)
           allocate(rbuffer_positions(3, n_recv_alloc))
           allocate(rbuffer_velocities(3, n_recv_alloc))
           allocate(rbuffer_fix_atom(3, n_recv_alloc))
+          if (debug) then
+             write(*,*) "receive buffers allocated:", n_recv_alloc
+          end if
        end if
        ! copy ghost sites to send buffers
        j = 1
@@ -979,7 +988,8 @@ subroutine migration_mask(mask, border, norm, n_pos)
        end if
        call vectorised_projection(norm(s:e, 1:3), surface, &
                                   positions(1:3, s:e), n_recv)
-       call exchange_mask(mask(1:6, s:e), local_border, norm(s:e, 1:3), n_recv)
+       call exchange_mask(mask(1:6, s:e), local_border, norm(s:e, 1:3), &
+                          n_recv, rcut_max)
     end do
     ! FIXME: update n_sites_ghost?
     ! deallocate buffers

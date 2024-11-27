@@ -1206,8 +1206,8 @@ program turbogap
         if (local_rank == 0) then
            call halo_exchange(params%dd_grid, grid_coords, grid_surface, &
                               grid_borders, grid_neighbor, grid_comm, &
-                              local_comm, global_rank, local_rank, n_sites, &
-                              n_pos, n_sp, n_sp_sc, ids, positions, &
+                              local_comm, global_rank, local_rank, rcut_max, &
+                              n_sites, n_pos, n_sp, n_sp_sc, ids, positions, &
                               velocities, masses, xyz_species, species, &
                               xyz_species_supercell, species_supercell, &
                               fix_atom, params%dd_debug)
