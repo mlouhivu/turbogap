@@ -1204,13 +1204,39 @@ program turbogap
         end if
         ! halo exchange
         if (local_rank == 0) then
-           call halo_exchange(params%dd_grid, grid_coords, grid_surface, &
-                              grid_borders, grid_neighbor, grid_comm, &
-                              local_comm, global_rank, local_rank, rcut_max, &
-                              n_sites, n_pos, n_sp, n_sp_sc, ids, positions, &
-                              velocities, masses, xyz_species, species, &
-                              xyz_species_supercell, species_supercell, &
-                              fix_atom, params%dd_debug)
+           call halo_exchange(n_alloc, params%dd_grid, grid_coords, &
+                              grid_surface, grid_borders, grid_neighbor, &
+                              grid_comm, local_comm, global_rank, local_rank, &
+                              rcut_max, n_sites, n_pos, n_sp, n_sp_sc, ids, &
+                              positions, velocities, masses, xyz_species, &
+                              species, xyz_species_supercell, &
+                              species_supercell, fix_atom, params%dd_debug)
+        end if
+        call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, local_comm, ierr)
+        call mpi_bcast(n_pos, 1, MPI_INTEGER, 0, local_comm, ierr)
+        call mpi_bcast(n_sp, 1, MPI_INTEGER, 0, local_comm, ierr)
+        call mpi_bcast(n_sp_sc, 1, MPI_INTEGER, 0, local_comm, ierr)
+        call mpi_bcast(n_alloc, 1, MPI_INTEGER, 0, local_comm, ierr)
+        if (local_rank /= 0 .and. n_alloc /= size(ids)) then
+           ! reallocate arrays to match the new size
+           deallocate(ids)
+           deallocate(positions)
+           deallocate(velocities)
+           deallocate(masses)
+           deallocate(xyz_species)
+           deallocate(species)
+           deallocate(xyz_species_supercell)
+           deallocate(species_supercell)
+           deallocate(fix_atom)
+           allocate(ids(n_alloc))
+           allocate(positions(3, n_alloc))
+           allocate(velocities(3, n_alloc))
+           allocate(masses(n_alloc))
+           allocate(xyz_species(n_alloc))
+           allocate(species(n_alloc))
+           allocate(xyz_species_supercell(n_alloc))
+           allocate(species_supercell(n_alloc))
+           allocate(fix_atom(3, n_alloc))
         end if
         ! domain local
         call cpu_time(time_grid_local(1))

@@ -787,7 +787,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
 
 
 !**************************************************************************
-  subroutine halo_exchange(grid, grid_coords, surface, borders, neighbors, &
+  subroutine halo_exchange(n_alloc, grid, grid_coords, surface, borders, neighbors, &
                            grid_comm, local_comm, global_rank, local_rank, &
                            rcut_max, n_sites, n_pos, n_sp, n_sp_sc, &
                            ids, positions, velocities, masses, xyz_species, &
@@ -796,6 +796,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
     use mpi
     implicit none
 
+    integer, intent(out) :: n_alloc
     integer, intent(in) :: grid(3)
     integer, intent(in) :: grid_coords(:,:)
     real*8, intent(in) :: surface(3,3)
@@ -823,7 +824,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
 
     real*8, allocatable :: norm(:,:), tmp_norm(:,:)
     logical, allocatable :: mask(:,:), tmp_mask(:,:)
-    integer :: n_alloc, n_alloc_old
+    integer :: n_alloc_old
     integer :: i, j, n, s, e, ierr
     integer :: src, tgt
     integer :: n_send, n_recv
@@ -840,9 +841,18 @@ subroutine migration_mask(mask, border, norm, n_pos)
     logical, allocatable :: buffer_fix_atom(:,:), rbuffer_fix_atom(:,:)
     character*8, allocatable :: buffer_xyz_species(:)
     character*8, allocatable :: buffer_xyz_species_supercell(:)
+    integer, allocatable :: tmp_ids(:)
+    real*8, allocatable :: tmp_positions(:,:)
+    real*8, allocatable :: tmp_velocities(:,:)
+    real*8, allocatable :: tmp_masses(:)
+    integer, allocatable :: tmp_species(:)
+    integer, allocatable :: tmp_species_supercell(:)
+    logical, allocatable :: tmp_fix_atom(:,:)
+    character*8, allocatable :: tmp_xyz_species(:)
+    character*8, allocatable :: tmp_xyz_species_supercell(:)
 
     call domain_borders(local_border, borders, grid_coords, global_rank)
-    n_alloc = n_sites * 2
+    n_alloc = size(ids)
     allocate(norm(n_alloc, 3))
     call vectorised_projection(norm, surface, positions, n_sites)
     allocate(mask(6, n_alloc))
@@ -920,7 +930,46 @@ subroutine migration_mask(mask, border, norm, n_pos)
              j = j + 1
           end if
        end do
-       ! FIXME: reallocate arrays if needed
+       ! reallocate arrays if needed
+       if (n_alloc < n_sites + n_recv) then
+          n_alloc_old = n_alloc
+          do while (n_alloc < n_sites + n_recv)
+             n_alloc = n_alloc * 2
+          end do
+          allocate(tmp_ids(n_alloc))
+          tmp_ids(1:n_alloc_old) = ids(1:n_alloc_old)
+          call move_alloc(tmp_ids, ids)
+          allocate(tmp_positions(3, n_alloc))
+          tmp_positions(1:3, 1:n_alloc_old) = positions(1:3, 1:n_alloc_old)
+          call move_alloc(tmp_positions, positions)
+          allocate(tmp_velocities(3, n_alloc))
+          tmp_velocities(1:3, 1:n_alloc_old) = velocities(1:3, 1:n_alloc_old)
+          call move_alloc(tmp_velocities, velocities)
+          allocate(tmp_masses(n_alloc))
+          tmp_masses(1:n_alloc_old) = masses(1:n_alloc_old)
+          call move_alloc(tmp_masses, masses)
+          allocate(tmp_xyz_species(n_alloc))
+          tmp_xyz_species(1:n_alloc_old) = xyz_species(1:n_alloc_old)
+          call move_alloc(tmp_xyz_species, xyz_species)
+          allocate(tmp_species(n_alloc))
+          tmp_species(1:n_alloc_old) = species(1:n_alloc_old)
+          call move_alloc(tmp_species, species)
+          allocate(tmp_xyz_species_supercell(n_alloc))
+          tmp_xyz_species_supercell(1:n_alloc_old) = xyz_species_supercell(1:n_alloc_old)
+          call move_alloc(tmp_xyz_species_supercell, xyz_species_supercell)
+          allocate(tmp_species_supercell(n_alloc))
+          tmp_species_supercell(1:n_alloc_old) = species_supercell(1:n_alloc_old)
+          call move_alloc(tmp_species_supercell, species_supercell)
+          allocate(tmp_fix_atom(3, n_alloc))
+          tmp_fix_atom(1:3,1:n_alloc_old) = fix_atom(1:3,1:n_alloc_old)
+          call move_alloc(tmp_fix_atom, fix_atom)
+          allocate(tmp_norm(n_alloc, 3))
+          tmp_norm(1:n_alloc_old, 1:3) = norm(1:n_alloc_old, 1:3)
+          call move_alloc(tmp_norm, norm)
+          allocate(tmp_mask(6, n_alloc))
+          tmp_mask(1:6, 1:n_alloc_old) = mask(1:6, 1:n_alloc_old)
+          call move_alloc(tmp_mask, mask)
+       end if
        ! halo exchange
        s = 1 + n_sites
        e = 1 + n_sites + n_recv
@@ -974,18 +1023,6 @@ subroutine migration_mask(mask, border, norm, n_pos)
        fix_atom(1:3, s:e) = rbuffer_fix_atom(1:3, 1:n_recv)
        n_sites = n_sites + n_recv
        ! calculate new norms and update masks
-       if (n_sites > n_alloc) then
-          n_alloc_old = n_alloc
-          do while (n_sites > n_alloc)
-             n_alloc = n_alloc * 2
-          end do
-          allocate(tmp_norm(n_alloc, 3))
-          tmp_norm(1:n_alloc_old, 1:3) = norm(1:n_alloc_old, 1:3)
-          call move_alloc(tmp_norm, norm)
-          allocate(tmp_mask(6, n_alloc))
-          tmp_mask(1:6, 1:n_alloc_old) = mask(1:6, 1:n_alloc_old)
-          call move_alloc(tmp_mask, mask)
-       end if
        call vectorised_projection(norm(s:e, 1:3), surface, &
                                   positions(1:3, s:e), n_recv)
        call exchange_mask(mask(1:6, s:e), local_border, norm(s:e, 1:3), &
