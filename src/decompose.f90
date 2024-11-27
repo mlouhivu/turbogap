@@ -785,12 +785,12 @@ subroutine migration_mask(mask, border, norm, n_pos)
 
 
 !**************************************************************************
-  subroutine exchange(grid, grid_coords, surface, borders, neighbors, &
-                     grid_comm, local_comm, global_rank, local_rank, &
-                     n_sites, n_pos, n_sp, n_sp_sc, &
-                     positions, velocities, masses, xyz_species, &
-                     species, xyz_species_supercell, species_supercell, &
-                     fix_atom, ids)
+  subroutine halo_exchange(grid, grid_coords, surface, borders, neighbors, &
+                           grid_comm, local_comm, global_rank, local_rank, &
+                           n_sites, n_pos, n_sp, n_sp_sc, &
+                           ids, positions, velocities, masses, xyz_species, &
+                           species, xyz_species_supercell, species_supercell, &
+                           fix_atom, debug)
     use mpi
     implicit none
 
@@ -803,19 +803,20 @@ subroutine migration_mask(mask, border, norm, n_pos)
     integer, intent(in) :: local_comm
     integer, intent(in) :: global_rank
     integer, intent(in) :: local_rank
-    integer, intent(in) :: n_sites
-    integer, intent(in) :: n_pos
-    integer, intent(in) :: n_sp
-    integer, intent(in) :: n_sp_sc
-    real*8, intent(in) :: positions(3, n_pos)
-    real*8, intent(in) :: velocities(3, n_sp)
-    real*8, intent(in) :: masses(n_sp)
-    integer, intent(in) :: xyz_species(n_sp)
-    integer, intent(in) :: species(n_sp)
-    integer, intent(in) :: xyz_species_supercell(n_sp_sc)
-    integer, intent(in) :: species_supercell(n_sp_sc)
-    logical, intent(in) :: fix_atom(3, n_sp)
-    integer, intent(in) :: ids(n_sites)
+    integer, intent(inout) :: n_sites
+    integer, intent(inout) :: n_pos
+    integer, intent(inout) :: n_sp
+    integer, intent(inout) :: n_sp_sc
+    integer, intent(inout), allocatable :: ids(:)
+    real*8, intent(inout), allocatable :: positions(:,:)
+    real*8, intent(inout), allocatable :: velocities(:,:)
+    real*8, intent(inout), allocatable :: masses(:)
+    character*8, intent(inout), allocatable :: xyz_species(:)
+    integer, intent(inout), allocatable :: species(:)
+    character*8, intent(inout), allocatable :: xyz_species_supercell(:)
+    integer, intent(inout), allocatable :: species_supercell(:)
+    logical, intent(inout), allocatable :: fix_atom(:,:)
+    logical, intent(in) :: debug
 
     real*8, allocatable :: norm(:,:), tmp_norm(:,:)
     logical, allocatable :: mask(:,:), tmp_mask(:,:)
