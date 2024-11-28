@@ -568,13 +568,15 @@ subroutine migration_mask(mask, border, norm, n_pos)
     logical, intent(in) :: debug
 
     real*8 :: norm(n_sites, 3)
-    integer :: n, s, r, ierr
+    integer :: n, s, r, a, o, ierr
     integer :: n_recv, n_send
     real*8 :: local_border(6)
     logical :: mask(0:26, n_sites)
     integer :: send_count(26)
     integer :: recv_count(26)
-    integer :: status(MPI_STATUS_SIZE)
+    integer :: request(468)
+    integer :: status(MPI_STATUS_SIZE, 468)
+    !type(mpi_status) :: status(468)
     integer :: targets(n_sites)
     integer, allocatable :: sort_order(:)
     integer, allocatable :: buffer_ids(:)
@@ -601,10 +603,12 @@ subroutine migration_mask(mask, border, norm, n_pos)
 
     ! how many sites to migrate?
     do n = 1, 26
-       call mpi_sendrecv(send_count(n), 1, MPI_INTEGER, neighbors(n), 0, &
-                         recv_count(n), 1, MPI_INTEGER, neighbors(n), 0, &
-                         grid_comm, status, ierr)
+       call mpi_irecv(recv_count(n), 1, MPI_INTEGER, neighbors(n), 0, &
+                      grid_comm, request(n), ierr)
+       call mpi_isend(send_count(n), 1, MPI_INTEGER, neighbors(n), 0, &
+                      grid_comm, request(n+26), ierr)
     end do
+    call mpi_waitall(n * 2, request(1:n*2), status, ierr)
     ! sort arrays to move to-be-migrated sites to the end
     allocate(sort_order(n_sites))
     call get_sort_order(sort_order, targets, n_sites, 27)
@@ -679,54 +683,67 @@ subroutine migration_mask(mask, border, norm, n_pos)
     s = 1
     r = 1 + n_sites - n_send
     do n = 1, 26
-       call mpi_sendrecv(buffer_ids(s:), send_count(n), &
-                         MPI_INTEGER, neighbors(n), 0, &
-                         ids(r:), recv_count(n), &
-                         MPI_INTEGER, neighbors(n), 0, &
-                         grid_comm, status, ierr)
-       call mpi_sendrecv(buffer_positions(1:3,s:), 3 * send_count(n), &
-                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
-                         positions(1:3,r:), 3 * recv_count(n), &
-                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
-                         grid_comm, status, ierr)
-       call mpi_sendrecv(buffer_velocities(1:3,s:), 3 * send_count(n), &
-                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
-                         velocities(1:3,r:), 3 * recv_count(n), &
-                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
-                         grid_comm, status, ierr)
-       call mpi_sendrecv(buffer_masses(s:), send_count(n), &
-                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
-                         masses(r:), recv_count(n), &
-                         MPI_DOUBLE_PRECISION, neighbors(n), 0, &
-                         grid_comm, status, ierr)
-       call mpi_sendrecv(buffer_xyz_species(s:), 8 * send_count(n), &
-                         MPI_CHARACTER, neighbors(n), 0, &
-                         xyz_species(r:), 8 * recv_count(n), &
-                         MPI_CHARACTER, neighbors(n), 0, &
-                         grid_comm, status, ierr)
-       call mpi_sendrecv(buffer_species(s:), send_count(n), &
-                         MPI_INTEGER, neighbors(n), 0, &
-                         species(r:), recv_count(n), &
-                         MPI_INTEGER, neighbors(n), 0, &
-                         grid_comm, status, ierr)
-       call mpi_sendrecv(buffer_xyz_species_supercell(s:), 8 * send_count(n), &
-                         MPI_CHARACTER, neighbors(n), 0, &
-                         xyz_species_supercell(r:), 8 * recv_count(n), &
-                         MPI_CHARACTER, neighbors(n), 0, &
-                         grid_comm, status, ierr)
-       call mpi_sendrecv(buffer_species_supercell(s:), send_count(n), &
-                         MPI_INTEGER, neighbors(n), 0, &
-                         species_supercell(r:), recv_count(n), &
-                         MPI_INTEGER, neighbors(n), 0, &
-                         grid_comm, status, ierr)
-       call mpi_sendrecv(buffer_fix_atom(1:3,s:), 3 * send_count(n), &
-                         MPI_LOGICAL, neighbors(n), 0, &
-                         fix_atom(1:3,r:), 3 * recv_count(n), &
-                         MPI_LOGICAL, neighbors(n), 0, &
-                         grid_comm, status, ierr)
+       a = 9                ! no. of arrays to communicate
+       o = (n - 1) * 2 * a  ! request offset
+       call mpi_irecv(ids(r:), recv_count(n), &
+                      MPI_INTEGER, neighbors(n), 1, &
+                      grid_comm, request(o+1), ierr)
+       call mpi_irecv(positions(1:3,r:), 3 * recv_count(n), &
+                      MPI_DOUBLE_PRECISION, neighbors(n), 2, &
+                      grid_comm, request(o+2), ierr)
+       call mpi_irecv(velocities(1:3,r:), 3 * recv_count(n), &
+                      MPI_DOUBLE_PRECISION, neighbors(n), 3, &
+                      grid_comm, request(o+3), ierr)
+       call mpi_irecv(masses(r:), recv_count(n), &
+                      MPI_DOUBLE_PRECISION, neighbors(n), 4, &
+                      grid_comm, request(o+4), ierr)
+       call mpi_irecv(xyz_species(r:), 8 * recv_count(n), &
+                      MPI_CHARACTER, neighbors(n), 5, &
+                      grid_comm, request(o+5), ierr)
+       call mpi_irecv(species(r:), recv_count(n), &
+                      MPI_INTEGER, neighbors(n), 6, &
+                      grid_comm, request(o+6), ierr)
+       call mpi_irecv(xyz_species_supercell(r:), 8 * recv_count(n), &
+                      MPI_CHARACTER, neighbors(n), 7, &
+                      grid_comm, request(o+7), ierr)
+       call mpi_irecv(species_supercell(r:), recv_count(n), &
+                      MPI_INTEGER, neighbors(n), 8, &
+                      grid_comm, request(o+8), ierr)
+       call mpi_irecv(fix_atom(1:3,r:), 3 * recv_count(n), &
+                      MPI_LOGICAL, neighbors(n), 9, &
+                      grid_comm, request(o+9), ierr)
+       o = o + a
+       call mpi_isend(buffer_ids(s:), send_count(n), &
+                      MPI_INTEGER, neighbors(n), 1, &
+                      grid_comm, request(o+1), ierr)
+       call mpi_isend(buffer_positions(1:3,s:), 3 * send_count(n), &
+                      MPI_DOUBLE_PRECISION, neighbors(n), 2, &
+                      grid_comm, request(o+2), ierr)
+       call mpi_isend(buffer_velocities(1:3,s:), 3 * send_count(n), &
+                      MPI_DOUBLE_PRECISION, neighbors(n), 3, &
+                      grid_comm, request(o+3), ierr)
+       call mpi_isend(buffer_masses(s:), send_count(n), &
+                      MPI_DOUBLE_PRECISION, neighbors(n), 4, &
+                      grid_comm, request(o+4), ierr)
+       call mpi_isend(buffer_xyz_species(s:), 8 * send_count(n), &
+                      MPI_CHARACTER, neighbors(n), 5, &
+                      grid_comm, request(o+5), ierr)
+       call mpi_isend(buffer_species(s:), send_count(n), &
+                      MPI_INTEGER, neighbors(n), 6, &
+                      grid_comm, request(o+6), ierr)
+       call mpi_isend(buffer_xyz_species_supercell(s:), 8 * send_count(n), &
+                      MPI_CHARACTER, neighbors(n), 7, &
+                      grid_comm, request(o+7), ierr)
+       call mpi_isend(buffer_species_supercell(s:), send_count(n), &
+                      MPI_INTEGER, neighbors(n), 8, &
+                      grid_comm, request(o+8), ierr)
+       call mpi_isend(buffer_fix_atom(1:3,s:), 3 * send_count(n), &
+                      MPI_LOGICAL, neighbors(n), 9, &
+                      grid_comm, request(o+9), ierr)
        s = s + send_count(n)
        r = r + recv_count(n)
     end do
+    call mpi_waitall(n * 2 * a, request, status, ierr)
     n_sites = n_sites - n_send + n_recv
     n_pos = n_pos - n_send + n_recv
     n_sp = n_sp - n_send + n_recv
