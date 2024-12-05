@@ -612,7 +612,7 @@ program turbogap
   end if
 #ifdef _MPIF90
 ! Split MPI ranks to domains
-  if (params%do_md) then
+  if (params%do_dd) then
     call check_grid(params%dd_grid, params%dd_grid_affinity)
     call grid_affinity(color, params%dd_grid, params%dd_grid_affinity, ntasks)
     call grid_dimensions(params%dd_grid, grid_dims)
@@ -630,7 +630,7 @@ program turbogap
     if (rank == 0) then
       call get_grid_coords(grid_coords, grid_comm, global_ntasks)
       call get_grid_root(grid_root, grid_coords, global_ntasks)
-    endif
+    end if
     call mpi_bcast(grid_coords, global_ntasks * 3, MPI_INTEGER, 0, &
                    MPI_COMM_WORLD, ierr)
     call mpi_bcast(grid_root, &
@@ -639,7 +639,13 @@ program turbogap
     if (params%dd_debug) then
       call print_grid(rank, ntasks, local_rank, global_rank, color, &
                       params%dd_grid, grid_dims, grid_coords, grid_root)
-    endif
+    end if
+  else
+    ! if no domains, all MPI tasks are "local"
+    global_ntasks = 1
+    global_rank = 0
+    local_ntasks = ntasks
+    local_rank = rank
   end if
 #endif
   call cpu_time(time_read_input(2))
@@ -1279,8 +1285,16 @@ program turbogap
 #endif
 
      !   Now that all ranks know the size of n_sites, we allocate do_list
-     if( .not. params%do_md .or. (params%do_md .and. md_istep == 0) .or. &
-          ( params%do_mc ) )then
+     if (params%do_dd) then
+        n_alloc = size(ids)
+        if (.not. allocated(do_list) .or. size(do_list) < n_alloc) then
+           if (allocated(do_list)) deallocate(do_list)
+           allocate(do_list(1:n_alloc))
+        end if
+        do_list = .false.
+        do_list(1:n_sites) = .true.
+     else if( .not. params%do_md .or. (params%do_md .and. md_istep == 0) .or. &
+               ( params%do_mc ) )then
         if( allocated(do_list))deallocate(do_list)
         allocate( do_list(1:n_sites) )
         do_list = .true.
@@ -1288,15 +1302,16 @@ program turbogap
 
 #ifdef _MPIF90
      !   This is some trivial MPI parallelization to make sure the code works fine
-     if( rank < mod( n_sites, ntasks ) )then
-        i_beg = 1 + rank*(n_sites / ntasks + 1)
+     if( local_rank < mod( n_sites, local_ntasks ) )then
+        i_beg = 1 + local_rank*(n_sites / local_ntasks + 1)
      else
-        i_beg = 1 + mod(n_sites, ntasks)*(n_sites / ntasks + 1) + (rank - mod( n_sites, ntasks))*(n_sites / ntasks)
+        i_beg = 1 + mod(n_sites, local_ntasks)*(n_sites / local_ntasks + 1) &
+              + (local_rank - mod( n_sites, local_ntasks))*(n_sites / local_ntasks)
      end if
-     if( rank < mod( n_sites, ntasks ) )then
-        i_end = (rank+1)*(n_sites / ntasks + 1)
+     if( local_rank < mod( n_sites, local_ntasks ) )then
+        i_end = (local_rank+1)*(n_sites / local_ntasks + 1)
      else
-        i_end = i_beg + n_sites/ntasks - 1
+        i_end = i_beg + n_sites/local_ntasks - 1
      end if
 
      do_list = .false.
@@ -1320,14 +1335,23 @@ program turbogap
           rebuild_neighbors_list, do_list, rank )
      if( rebuild_neighbors_list )then
         !     Get total number of atom pairs
-        call mpi_allgather(n_atom_pairs, 1, MPI_INTEGER, n_atom_pairs_by_rank, 1, MPI_INTEGER, MPI_COMM_WORLD, ierr)
+        if (params%do_dd) then
+           call mpi_allgather(n_atom_pairs, 1, MPI_INTEGER, n_atom_pairs_by_rank, 1, MPI_INTEGER, local_comm, ierr)
+        else
+           call mpi_allgather(n_atom_pairs, 1, MPI_INTEGER, n_atom_pairs_by_rank, 1, MPI_INTEGER, MPI_COMM_WORLD, ierr)
+        end if
         n_atom_pairs_total = sum(n_atom_pairs_by_rank)
         n_atom_pairs = n_atom_pairs_total
 
         !     Get number of neighbors
         if( .not. allocated(n_neigh))allocate( n_neigh(1:n_sites) )
-        call mpi_reduce(n_neigh_local, n_neigh, n_sites, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
-        call mpi_bcast(n_neigh, n_sites, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+        if (params%do_dd) then
+           call mpi_reduce(n_neigh_local, n_neigh, n_sites, MPI_INTEGER, MPI_SUM, 0, local_comm, ierr)
+           call mpi_bcast(n_neigh, n_sites, MPI_INTEGER, 0, local_comm, ierr)
+        else
+           call mpi_reduce(n_neigh_local, n_neigh, n_sites, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+           call mpi_bcast(n_neigh, n_sites, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+        end if
 
         j_beg = 1
         j_end = n_atom_pairs_by_rank(rank+1)
@@ -1455,7 +1479,11 @@ program turbogap
         !     Collect all energies
 #ifdef _MPIF90
         call cpu_time(time_mpi_ef(1))
-        call mpi_reduce(energies, this_energies, n_sites, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+        if (params%do_dd) then
+           call mpi_reduce(energies, this_energies, n_sites, MPI_DOUBLE_PRECISION, MPI_SUM, 0, local_comm, ierr)
+        else
+           call mpi_reduce(energies, this_energies, n_sites, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+        end if
         call cpu_time(time_mpi_ef(2))
         time_mpi_ef(3) = time_mpi_ef(3) + time_mpi_ef(2) - time_mpi_ef(1)
         energies = this_energies
@@ -1613,9 +1641,15 @@ program turbogap
 #ifdef _MPIF90
         if( any( soap_turbo_hypers(:)%has_vdw ) )then
            call cpu_time(time_mpi(1))
-           call mpi_reduce(hirshfeld_v, this_hirshfeld_v, n_sites,&
-                & MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD,&
-                & ierr)
+           if (params%do_dd) then
+              call mpi_reduce(hirshfeld_v, this_hirshfeld_v, n_sites,&
+                   & MPI_DOUBLE_PRECISION, MPI_SUM, 0, local_comm,&
+                   & ierr)
+           else
+              call mpi_reduce(hirshfeld_v, this_hirshfeld_v, n_sites,&
+                   & MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD,&
+                   & ierr)
+           end if
            !        if( params%do_forces )then
            !         I'm not sure if this is necessary at all... CHECK
            !          call mpi_reduce(hirshfeld_v_cart_der,
@@ -1625,7 +1659,11 @@ program turbogap
            !          hirshfeld_v_cart_der = this_hirshfeld_v_cart_der
            !        end if
            hirshfeld_v = this_hirshfeld_v
-           call mpi_bcast(hirshfeld_v, n_sites, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+           if (params%do_dd) then
+              call mpi_bcast(hirshfeld_v, n_sites, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+           else
+              call mpi_bcast(hirshfeld_v, n_sites, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+           end if
            call cpu_time(time_mpi(2))
            time_mpi(3) = time_mpi(3) + time_mpi(2) - time_mpi(1)
         end if
@@ -1843,16 +1881,30 @@ program turbogap
            end if
 
            !       Here we communicate
-           call mpi_reduce(all_energies, all_this_energies, n_sites&
-                &*counter2, MPI_DOUBLE_PRECISION, MPI_SUM, 0,&
-                & MPI_COMM_WORLD, ierr)
-           if( params%do_forces )then
-              call mpi_reduce(all_forces, all_this_forces, 3*n_sites&
+           if (params%do_dd) then
+              call mpi_reduce(all_energies, all_this_energies, n_sites&
+                   &*counter2, MPI_DOUBLE_PRECISION, MPI_SUM, 0,&
+                   & local_comm, ierr)
+              if( params%do_forces )then
+                 call mpi_reduce(all_forces, all_this_forces, 3*n_sites&
+                      &*counter2, MPI_DOUBLE_PRECISION, MPI_SUM, 0,&
+                      & local_comm, ierr)
+                 call mpi_reduce(all_virial, all_this_virial, 9*counter2&
+                      &, MPI_DOUBLE_PRECISION, MPI_SUM, 0,&
+                      & local_comm, ierr)
+              end if
+           else
+              call mpi_reduce(all_energies, all_this_energies, n_sites&
                    &*counter2, MPI_DOUBLE_PRECISION, MPI_SUM, 0,&
                    & MPI_COMM_WORLD, ierr)
-              call mpi_reduce(all_virial, all_this_virial, 9*counter2&
-                   &, MPI_DOUBLE_PRECISION, MPI_SUM, 0,&
-                   & MPI_COMM_WORLD, ierr)
+              if( params%do_forces )then
+                 call mpi_reduce(all_forces, all_this_forces, 3*n_sites&
+                      &*counter2, MPI_DOUBLE_PRECISION, MPI_SUM, 0,&
+                      & MPI_COMM_WORLD, ierr)
+                 call mpi_reduce(all_virial, all_this_virial, 9*counter2&
+                      &, MPI_DOUBLE_PRECISION, MPI_SUM, 0,&
+                      & MPI_COMM_WORLD, ierr)
+              end if
            end if
 
            !       Here we give proper names to the quantities - again, pointers would probably be faster
