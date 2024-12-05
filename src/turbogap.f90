@@ -167,6 +167,15 @@ program turbogap
   logical, allocatable :: global_fix_atom(:,:)
   character*8, allocatable :: global_xyz_species(:), &
                               global_xyz_species_supercell(:)
+  real*8, allocatable :: global_energies(:), global_energies_soap(:), &
+                         global_energies_vdw(:), global_energies_2b(:), &
+                         global_energies_core_pot(:), global_energies_3b(:)
+  real*8, allocatable :: global_forces(:,:), global_forces_soap(:,:), &
+                         global_forces_vdw(:,:), global_forces_2b(:,:), &
+                         global_forces_core_pot(:,:), global_forces_3b(:,:)
+  real*8, allocatable :: global_virial(:,:), global_virial_soap(:,:), &
+                         global_virial_vdw(:,:), global_virial_2b(:,:), &
+                         global_virial_core_pot(:,:), global_virial_3b(:,:)
   integer :: local_comm, global_comm, grid_comm
   integer :: local_rank, local_ntasks, global_rank, global_ntasks
   integer :: grid_neighbor(26)
@@ -1959,6 +1968,100 @@ program turbogap
               deallocate( all_forces, all_this_forces, all_virial, all_this_virial )
            end if
 
+           if (params%do_dd .and. local_rank == 0) then
+              ! gather energies (+ forces and virials) from all domains
+              if (md_istep == 0) then
+                 allocate(global_energies(1:n_sites_global))
+                 allocate(global_energies_soap(1:n_sites_global))
+                 allocate(global_energies_vdw(1:n_sites_global))
+                 allocate(global_energies_2b(1:n_sites_global))
+                 allocate(global_energies_core_pot(1:n_sites_global))
+                 allocate(global_energies_3b(1:n_sites_global))
+                 allocate(global_forces(1:3, 1:n_sites_global))
+                 allocate(global_forces_soap(1:3, 1:n_sites_global))
+                 allocate(global_forces_vdw(1:3, 1:n_sites_global))
+                 allocate(global_forces_2b(1:3, 1:n_sites_global))
+                 allocate(global_forces_core_pot(1:3, 1:n_sites_global))
+                 allocate(global_forces_3b(1:3, 1:n_sites_global))
+                 allocate(global_virial(1:3, 1:n_sites_global))
+                 allocate(global_virial_soap(1:3, 1:n_sites_global))
+                 allocate(global_virial_vdw(1:3, 1:n_sites_global))
+                 allocate(global_virial_2b(1:3, 1:n_sites_global))
+                 allocate(global_virial_core_pot(1:3, 1:n_sites_global))
+                 allocate(global_virial_3b(1:3, 1:n_sites_global))
+              end if
+              call mpi_gather(n_sites, 1, MPI_INTEGER, &
+                              distribute_counts, 1, MPI_INTEGER, &
+                              0, global_comm, ierr)
+              distribute_displs(i) = 0
+              do i = 2, global_ntasks
+                 distribute_displs(i) = distribute_displs(i-1) + distribute_counts(i-1)
+              end do
+              call mpi_gatherv(energies_soap, n_sites, MPI_DOUBLE_PRECISION, &
+                               global_energies_soap, distribute_counts, &
+                               distribute_displs, MPI_DOUBLE_PRECISION, &
+                               0, global_comm, ierr)
+              call mpi_gatherv(energies_vdw, n_sites, MPI_DOUBLE_PRECISION, &
+                               global_energies_vdw, distribute_counts, &
+                               distribute_displs, MPI_DOUBLE_PRECISION, &
+                               0, global_comm, ierr)
+              call mpi_gatherv(energies_2b, n_sites, MPI_DOUBLE_PRECISION, &
+                               global_energies_2b, distribute_counts, &
+                               distribute_displs, MPI_DOUBLE_PRECISION, &
+                               0, global_comm, ierr)
+              call mpi_gatherv(energies_core_pot, n_sites, MPI_DOUBLE_PRECISION, &
+                               global_energies_core_pot, distribute_counts, &
+                               distribute_displs, MPI_DOUBLE_PRECISION, &
+                               0, global_comm, ierr)
+              call mpi_gatherv(energies_3b, n_sites, MPI_DOUBLE_PRECISION, &
+                               global_energies_3b, distribute_counts, &
+                               distribute_displs, MPI_DOUBLE_PRECISION, &
+                               0, global_comm, ierr)
+              if (params%do_forces) then
+                 ! FIXME: are these even needed?
+                 call mpi_gatherv(forces_soap, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                                  global_forces_soap, distribute_counts * 3, &
+                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
+                                  0, global_comm, ierr)
+                 call mpi_gatherv(forces_vdw, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                                  global_forces_vdw, distribute_counts * 3, &
+                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
+                                  0, global_comm, ierr)
+                 call mpi_gatherv(forces_2b, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                                  global_forces_2b, distribute_counts * 3, &
+                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
+                                  0, global_comm, ierr)
+                 call mpi_gatherv(forces_core_pot, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                                  global_forces_core_pot, distribute_counts * 3, &
+                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
+                                  0, global_comm, ierr)
+                 call mpi_gatherv(forces_3b, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                                  global_forces_3b, distribute_counts * 3, &
+                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
+                                  0, global_comm, ierr)
+                 call mpi_gatherv(virial_soap, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                                  global_virial_soap, distribute_counts * 3, &
+                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
+                                  0, global_comm, ierr)
+                 call mpi_gatherv(virial_vdw, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                                  global_virial_vdw, distribute_counts * 3, &
+                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
+                                  0, global_comm, ierr)
+                 call mpi_gatherv(virial_2b, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                                  global_virial_2b, distribute_counts * 3, &
+                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
+                                  0, global_comm, ierr)
+                 call mpi_gatherv(virial_core_pot, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                                  global_virial_core_pot, distribute_counts * 3, &
+                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
+                                  0, global_comm, ierr)
+                 call mpi_gatherv(virial_3b, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                                  global_virial_3b, distribute_counts * 3, &
+                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
+                                  0, global_comm, ierr)
+              end if
+           end if
+
            call cpu_time(time_mpi_ef(2))
            time_mpi_ef(3) = time_mpi_ef(3) + time_mpi_ef(2) - time_mpi_ef(1)
 #endif
@@ -1971,6 +2074,10 @@ program turbogap
            energy_prev = energy
            instant_pressure_prev = instant_pressure
            energy = sum(energies)
+           if (params%do_dd) then
+              ! broadcast the global energy (at rank 0) to everyone
+              call mpi_bcast(energy, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+           end if
         end if
 
 
