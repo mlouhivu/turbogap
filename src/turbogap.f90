@@ -2252,6 +2252,16 @@ program turbogap
 
 	  !! ----------------------------------	******** until here for adaptive time
            
+           if (params%do_dd) then
+              ! reallocate arrays if needed
+              if (size(positions_prev, 2) < n_sites) then
+                 deallocate(positions_prev)
+                 deallocate(forces_prev)
+                 n_alloc = size(positions, 2)
+                 allocate(positions_prev(1:3, 1:n_alloc))
+                 allocate(forces_prev(1:3, 1:n_alloc))
+              end if
+           end if
            !     This takes care of NVE
            !     Velocity Verlet takes positions for t, positions_prev for t-dt, and velocities for t-dt and returns everything
            !     dt later. forces are taken at t, and forces_prev at t-dt. forces is left unchanged by the routine, and
