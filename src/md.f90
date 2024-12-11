@@ -173,6 +173,24 @@ module md
 
 
 
+!**************************************************************************
+  subroutine calculate_cm_vel(cm_vel, vel, M)
+    implicit none
+
+    real*8, intent(out) :: cm_vel(1:3)
+    real*8, intent(in) :: vel(:,:)
+    real*8, intent(in) :: M(:)
+    integer :: Np, i
+
+    Np = size(vel, 2)
+
+    cm_vel = 0.d0
+    do i = 1, Np
+      cm_vel(1:3) = cm_vel(1:3) + M(i)*vel(1:3,i)
+    end do
+  end subroutine
+!**************************************************************************
+
 
 
 

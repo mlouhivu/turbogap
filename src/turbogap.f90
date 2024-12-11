@@ -186,6 +186,7 @@ program turbogap
   real*8 :: grid_surface(3,3)
   integer, allocatable :: distribute_counts(:), distribute_displs(:)
   logical :: supercell_has_changed = .false.
+  real*8 :: cm_vel(1:3), total_mass
 
   ! Nested sampling
   real*8 :: e_max, e_kin, rand, rand_scale(1:6)
@@ -1041,6 +1042,8 @@ program turbogap
               allocate(global_ids(1:n_sites))
               global_ids = [(i, i=1,n_sites)]
               global_ids = global_ids(sort_order)
+              ! total mass needed for CM velocity removal
+              total_mass = sum(global_masses)
            end if
            ! prepare to distribute sites
            allocate(distribute_counts(global_ntasks))
@@ -1189,6 +1192,7 @@ program turbogap
            call mpi_bcast(a_box, 3, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
            call mpi_bcast(b_box, 3, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
            call mpi_bcast(c_box, 3, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+           call mpi_bcast(total_mass, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
            call cpu_time(time_mpi_positions(2))
            time_mpi_positions(3) = time_mpi_positions(3) &
                                  + time_mpi_positions(2) - time_mpi_positions(1)
@@ -2178,7 +2182,7 @@ program turbogap
      !**************************************************************************
      !   Do MD stuff here
 #ifdef _MPIF90
-     IF( rank == 0 )THEN
+     IF( local_rank == 0 )THEN
 #endif
         if( params%do_md .and. md_istep > -1)then
            call cpu_time(time_md(1))
@@ -2193,8 +2197,19 @@ program turbogap
            call wrap_pbc(positions(1:3,1:n_sites), a_box&
                 &/dfloat(indices(1)), b_box/dfloat(indices(2)), c_box&
                 &/dfloat(indices(3)))
-           call remove_cm_vel(velocities(1:3,1:n_sites),&
-                & masses(1:n_sites))
+           if (params%do_dd) then
+              call calculate_cm_vel(cm_vel, velocities(1:3, 1:n_sites_local), &
+                                    masses(1:n_sites_local))
+              call mpi_allreduce(MPI_IN_PLACE, cm_vel, 3, MPI_DOUBLE_PRECISION, &
+                              MPI_SUM, 0, global_comm, ierr)
+              cm_vel = cm_vel / total_mass
+              do i = 1, n_sites_local
+                 velocities(1:3, i) = velocities(1:3, i) - cm_vel(1:3)
+              end do
+           else
+              call remove_cm_vel(velocities(1:3,1:n_sites),&
+                   & masses(1:n_sites))
+           end if
 
            !     First we check if this is a variable time step simulation
            if( params%variable_time_step )then
