@@ -173,9 +173,9 @@ program turbogap
   real*8, allocatable :: global_forces(:,:), global_forces_soap(:,:), &
                          global_forces_vdw(:,:), global_forces_2b(:,:), &
                          global_forces_core_pot(:,:), global_forces_3b(:,:)
-  real*8, allocatable :: global_virial(1:3,1:3), global_virial_soap(1:3,1:3), &
-                         global_virial_vdw(1:3,1:3), global_virial_2b(1:3,1:3), &
-                         global_virial_core_pot(1:3,1:3), global_virial_3b(1:3,1:3)
+  real*8 :: global_virial(1:3,1:3), global_virial_soap(1:3,1:3), &
+            global_virial_vdw(1:3,1:3), global_virial_2b(1:3,1:3), &
+            global_virial_core_pot(1:3,1:3), global_virial_3b(1:3,1:3)
   integer :: local_comm, global_comm, grid_comm
   integer :: local_rank, local_ntasks, global_rank, global_ntasks
   integer :: grid_neighbor(26)
