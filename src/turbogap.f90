@@ -2326,23 +2326,46 @@ program turbogap
            !     Compute kinetic energy from current velocities. Because Velocity Verlet
            !     works with the velocities at t-dt (except for the first time step) we
            !     have to compute the velocities after call Verlet
-           E_kinetic = 0.d0
-           do i = 1, n_sites
-              E_kinetic = E_kinetic + 0.5d0 * masses(i) * dot_product(velocities(1:3, i), velocities(1:3, i))
-           end do
-           instant_temp = 2.d0/3.d0/dfloat(n_sites-1)/kB*E_kinetic
+           if (params%do_dd) then
+              E_kinetic = 0.d0
+              do i = 1, n_sites_local
+                 E_kinetic = E_kinetic + 0.5d0 * masses(i) * dot_product(velocities(1:3, i), velocities(1:3, i))
+              end do
+              call mpi_allreduce(MPI_IN_PLACE, E_kinetic, 1, MPI_DOUBLE_PRECISION, &
+                                 MPI_SUM, global_comm, ierr)
+              instant_temp = 2.d0/3.d0/dfloat(n_sites_global-1)/kB*E_kinetic
+           else
+              E_kinetic = 0.d0
+              do i = 1, n_sites
+                 E_kinetic = E_kinetic + 0.5d0 * masses(i) * dot_product(velocities(1:3, i), velocities(1:3, i))
+              end do
+              instant_temp = 2.d0/3.d0/dfloat(n_sites-1)/kB*E_kinetic
+           end if
 
            !     Instant pressure in bar
-           instant_pressure = (kB*dfloat(n_sites-1)*instant_temp&
-                &+(virial(1,1) + virial(2,2) + virial(3,3))/3.d0)&
-                &/v_uc*eVperA3tobar
-           instant_pressure_tensor(1:3, 1:3) = virial(1:3,1:3)/v_uc&
-                &*eVperA3tobar
-           do i = 1, 3
-              instant_pressure_tensor(i, i) =&
-                   & instant_pressure_tensor(i, i) + (kB&
-                   &*dfloat(n_sites-1)*instant_temp)/v_uc*eVperA3tobar
-           end do
+           if (params%do_dd) then
+              instant_pressure = (kB*dfloat(n_sites_global-1)*instant_temp&
+                   &+(global_virial(1,1) + global_virial(2,2) + global_virial(3,3))/3.d0)&
+                   &/v_uc*eVperA3tobar
+              instant_pressure_tensor(1:3, 1:3) = global_virial(1:3,1:3)/v_uc&
+                   &*eVperA3tobar
+              do i = 1, 3
+                 instant_pressure_tensor(i, i) =&
+                      & instant_pressure_tensor(i, i) + (kB&
+                      &*dfloat(n_sites_global-1)*instant_temp)/v_uc*eVperA3tobar
+              end do
+           else
+              instant_pressure = (kB*dfloat(n_sites-1)*instant_temp&
+                   &+(virial(1,1) + virial(2,2) + virial(3,3))/3.d0)&
+                   &/v_uc*eVperA3tobar
+              instant_pressure_tensor(1:3, 1:3) = virial(1:3,1:3)/v_uc&
+                   &*eVperA3tobar
+              do i = 1, 3
+                 instant_pressure_tensor(i, i) =&
+                      & instant_pressure_tensor(i, i) + (kB&
+                      &*dfloat(n_sites-1)*instant_temp)/v_uc*eVperA3tobar
+              end do
+           end if
 
            !     Here we write thermodynamic information -> THIS NEEDS CLEAN UP AND IMPROVEMENT
            if( md_istep == 0 .and. .not. params%do_nested_sampling )then
