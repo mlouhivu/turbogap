@@ -150,7 +150,7 @@ program turbogap
   logical, allocatable :: compress_soap_mpi(:)
 
   ! Domain decomposition
-  integer :: n_sites_global, n_sites_ghost, n_alloc
+  integer :: n_sites_global, n_sites_local, n_sites_ghost, n_alloc
   real*8 :: cell(3:3), cell_origo(3)
   integer, allocatable :: color(:), grid_coords(:,:), grid_root(:,:,:), &
                           placement(:), sort_order(:)
@@ -173,9 +173,9 @@ program turbogap
   real*8, allocatable :: global_forces(:,:), global_forces_soap(:,:), &
                          global_forces_vdw(:,:), global_forces_2b(:,:), &
                          global_forces_core_pot(:,:), global_forces_3b(:,:)
-  real*8, allocatable :: global_virial(:,:), global_virial_soap(:,:), &
-                         global_virial_vdw(:,:), global_virial_2b(:,:), &
-                         global_virial_core_pot(:,:), global_virial_3b(:,:)
+  real*8, allocatable :: global_virial(1:3,1:3), global_virial_soap(1:3,1:3), &
+                         global_virial_vdw(1:3,1:3), global_virial_2b(1:3,1:3), &
+                         global_virial_core_pot(1:3,1:3), global_virial_3b(1:3,1:3)
   integer :: local_comm, global_comm, grid_comm
   integer :: local_rank, local_ntasks, global_rank, global_ntasks
   integer :: grid_neighbor(26)
@@ -1065,9 +1065,10 @@ program turbogap
            n_sites_global = n_sites
            n_sites = distribute_counts(global_rank + 1)
         end if
-        ! FIXME: either allow different values or use just one variable
         call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, local_comm, ierr)
         call mpi_bcast(n_sites_global, 1, MPI_INTEGER, 0, local_comm, ierr)
+        n_sites_local = n_sites
+        ! FIXME: either allow different values or use just one variable
         n_pos = n_sites
         n_sp = n_sites
         n_sp_sc = n_sites
@@ -1101,37 +1102,12 @@ program turbogap
         if (local_rank == 0) then
            call migrate(n_alloc, params%dd_grid, grid_coords, grid_surface, &
                         grid_borders, grid_neighbor, grid_comm, local_comm, &
-                        global_rank, local_rank, n_sites, n_pos, n_sp, &
+                        global_rank, local_rank, n_sites_local, n_pos, n_sp, &
                         n_sp_sc, ids, positions, velocities, masses, &
                         xyz_species, species, xyz_species_supercell, &
                         species_supercell, fix_atom, params%dd_debug)
         end if
-        call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, local_comm, ierr)
-        call mpi_bcast(n_pos, 1, MPI_INTEGER, 0, local_comm, ierr)
-        call mpi_bcast(n_sp, 1, MPI_INTEGER, 0, local_comm, ierr)
-        call mpi_bcast(n_sp_sc, 1, MPI_INTEGER, 0, local_comm, ierr)
-        call mpi_bcast(n_alloc, 1, MPI_INTEGER, 0, local_comm, ierr)
-        if (n_alloc > 0 .and. local_rank /= 0) then
-           ! reallocate arrays to match the new size
-           deallocate(ids)
-           deallocate(positions)
-           deallocate(velocities)
-           deallocate(masses)
-           deallocate(xyz_species)
-           deallocate(species)
-           deallocate(xyz_species_supercell)
-           deallocate(species_supercell)
-           deallocate(fix_atom)
-           allocate(ids(n_alloc))
-           allocate(positions(3, n_alloc))
-           allocate(velocities(3, n_alloc))
-           allocate(masses(n_alloc))
-           allocate(xyz_species(n_alloc))
-           allocate(species(n_alloc))
-           allocate(xyz_species_supercell(n_alloc))
-           allocate(species_supercell(n_alloc))
-           allocate(fix_atom(3, n_alloc))
-        end if
+        call mpi_bcast(n_sites_local, 1, MPI_INTEGER, 0, local_comm, ierr)
      else
         call cpu_time(time_mpi(1))
         call mpi_bcast(n_pos, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
@@ -1218,6 +1194,7 @@ program turbogap
                                  + time_mpi_positions(2) - time_mpi_positions(1)
         end if
         ! halo exchange
+        n_sites = n_sites_local
         if (local_rank == 0) then
            call halo_exchange(n_alloc, params%dd_grid, grid_coords, &
                               grid_surface, grid_borders, grid_neighbor, &
@@ -1301,7 +1278,7 @@ program turbogap
            allocate(do_list(1:n_alloc))
         end if
         do_list = .false.
-        do_list(1:n_sites) = .true.
+        do_list(1:n_sites_local) = .true.
      else if( .not. params%do_md .or. (params%do_md .and. md_istep == 0) .or. &
                ( params%do_mc ) )then
         if( allocated(do_list))deallocate(do_list)
@@ -1983,14 +1960,8 @@ program turbogap
                  allocate(global_forces_2b(1:3, 1:n_sites_global))
                  allocate(global_forces_core_pot(1:3, 1:n_sites_global))
                  allocate(global_forces_3b(1:3, 1:n_sites_global))
-                 allocate(global_virial(1:3, 1:n_sites_global))
-                 allocate(global_virial_soap(1:3, 1:n_sites_global))
-                 allocate(global_virial_vdw(1:3, 1:n_sites_global))
-                 allocate(global_virial_2b(1:3, 1:n_sites_global))
-                 allocate(global_virial_core_pot(1:3, 1:n_sites_global))
-                 allocate(global_virial_3b(1:3, 1:n_sites_global))
               end if
-              call mpi_gather(n_sites, 1, MPI_INTEGER, &
+              call mpi_gather(n_sites_local, 1, MPI_INTEGER, &
                               distribute_counts, 1, MPI_INTEGER, &
                               0, global_comm, ierr)
               distribute_displs(i) = 0
@@ -2018,7 +1989,6 @@ program turbogap
                                distribute_displs, MPI_DOUBLE_PRECISION, &
                                0, global_comm, ierr)
               if (params%do_forces) then
-                 ! FIXME: are these even needed?
                  call mpi_gatherv(forces_soap, n_sites * 3, MPI_DOUBLE_PRECISION, &
                                   global_forces_soap, distribute_counts * 3, &
                                   distribute_displs * 3, MPI_DOUBLE_PRECISION, &
@@ -2039,26 +2009,16 @@ program turbogap
                                   global_forces_3b, distribute_counts * 3, &
                                   distribute_displs * 3, MPI_DOUBLE_PRECISION, &
                                   0, global_comm, ierr)
-                 call mpi_gatherv(virial_soap, n_sites * 3, MPI_DOUBLE_PRECISION, &
-                                  global_virial_soap, distribute_counts * 3, &
-                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
-                                  0, global_comm, ierr)
-                 call mpi_gatherv(virial_vdw, n_sites * 3, MPI_DOUBLE_PRECISION, &
-                                  global_virial_vdw, distribute_counts * 3, &
-                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
-                                  0, global_comm, ierr)
-                 call mpi_gatherv(virial_2b, n_sites * 3, MPI_DOUBLE_PRECISION, &
-                                  global_virial_2b, distribute_counts * 3, &
-                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
-                                  0, global_comm, ierr)
-                 call mpi_gatherv(virial_core_pot, n_sites * 3, MPI_DOUBLE_PRECISION, &
-                                  global_virial_core_pot, distribute_counts * 3, &
-                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
-                                  0, global_comm, ierr)
-                 call mpi_gatherv(virial_3b, n_sites * 3, MPI_DOUBLE_PRECISION, &
-                                  global_virial_3b, distribute_counts * 3, &
-                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
-                                  0, global_comm, ierr)
+                 call mpi_reduce(virial_soap, global_virial_soap, 9, &
+                                 MPI_DOUBLE_PRECISION, MPI_SUM, 0, global_comm, ierr)
+                 call mpi_reduce(virial_vdw, global_virial_vdw, 9, &
+                                 MPI_DOUBLE_PRECISION, MPI_SUM, 0, global_comm, ierr)
+                 call mpi_reduce(virial_2b, global_virial_2b, 9, &
+                                 MPI_DOUBLE_PRECISION, MPI_SUM, 0, global_comm, ierr)
+                 call mpi_reduce(virial_core_pot, global_virial_core_pot, 9, &
+                                 MPI_DOUBLE_PRECISION, MPI_SUM, 0, global_comm, ierr)
+                 call mpi_reduce(virial_3b, global_virial_3b, 9, &
+                                 MPI_DOUBLE_PRECISION, MPI_SUM, 0, global_comm, ierr)
               end if
            end if
 
