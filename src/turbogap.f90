@@ -2201,7 +2201,7 @@ program turbogap
               call calculate_cm_vel(cm_vel, velocities(1:3, 1:n_sites_local), &
                                     masses(1:n_sites_local))
               call mpi_allreduce(MPI_IN_PLACE, cm_vel, 3, MPI_DOUBLE_PRECISION, &
-                              MPI_SUM, 0, global_comm, ierr)
+                                 MPI_SUM, global_comm, ierr)
               cm_vel = cm_vel / total_mass
               do i = 1, n_sites_local
                  velocities(1:3, i) = velocities(1:3, i) - cm_vel(1:3)
