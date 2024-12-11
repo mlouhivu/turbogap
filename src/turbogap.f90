@@ -2502,9 +2502,15 @@ program turbogap
                    params%t_beg + (params%t_end-params%t_beg)*dfloat(md_istep+1)/float(params%md_nsteps), &
                    instant_temp, params%tau_t, time_step)
            else if( params%thermostat == "bussi" )then
-              velocities(1:3, 1:n_sites) = velocities(1:3, 1:n_sites) * dsqrt(resamplekin(E_kinetic, &
-                   params%t_beg + (params%t_end-params%t_beg)*dfloat(md_istep+1)/float(params%md_nsteps), &
-                   3*n_sites-3,params%tau_t, time_step) / E_kinetic)
+              if (params%do_dd) then
+                 velocities(1:3, 1:n_sites) = velocities(1:3, 1:n_sites) * dsqrt(resamplekin(E_kinetic, &
+                      params%t_beg + (params%t_end-params%t_beg)*dfloat(md_istep+1)/float(params%md_nsteps), &
+                      3*n_sites_global-3,params%tau_t, time_step) / E_kinetic)
+              else
+                 velocities(1:3, 1:n_sites) = velocities(1:3, 1:n_sites) * dsqrt(resamplekin(E_kinetic, &
+                      params%t_beg + (params%t_end-params%t_beg)*dfloat(md_istep+1)/float(params%md_nsteps), &
+                      3*n_sites-3,params%tau_t, time_step) / E_kinetic)
+              end if
            end if
            !     Check what's the maximum atomic displacement since last neighbors build
            positions_diff = positions_diff + positions(1:3, 1:n_sites) - positions_prev(1:3, 1:n_sites)
