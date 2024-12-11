@@ -2565,16 +2565,17 @@ program turbogap
      !   Make sure all ranks have correct positions and velocities
 #ifdef _MPIF90
      if( params%do_md )then
+        call cpu_time(time_mpi_positions(1))
         if (params%do_dd) then
-           ! FIXME: halo exchange?
+           call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+           call mpi_bcast(velocities, 3*n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
         else
-           call cpu_time(time_mpi_positions(1))
            n_pos = size(positions,2)
            call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
            call mpi_bcast(velocities, 3*n_sp, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-           call cpu_time(time_mpi_positions(2))
-           time_mpi_positions(3) = time_mpi_positions(3) + time_mpi_positions(2) - time_mpi_positions(1)
         end if
+        call cpu_time(time_mpi_positions(2))
+        time_mpi_positions(3) = time_mpi_positions(3) + time_mpi_positions(2) - time_mpi_positions(1)
      end if
 #endif
 
