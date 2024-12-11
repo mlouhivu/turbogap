@@ -2367,36 +2367,38 @@ program turbogap
               end do
            end if
 
-           !     Here we write thermodynamic information -> THIS NEEDS CLEAN UP AND IMPROVEMENT
-           if( md_istep == 0 .and. .not. params%do_nested_sampling )then
-              open(unit=10, file="thermo.log", status="unknown")
-              write(10,"(A,A)") "#     Step             Time      Temperature                E_kin                     E_pot", &
-                                "             Pressure"
-           else if( md_istep == 0 .and. i_nested == 1 )then
-              open(unit=10, file="thermo.log", status="unknown")
-              write(10,"(A,A)") "#     Step             Time      Temperature                E_kin                     E_pot", &
-                                "             Pressure"
-           else
-              open(unit=10, file="thermo.log", status="old", position="append")
-           end if
-           if( .not. params%do_mc .and. (md_istep == 0 .or. md_istep == params%md_nsteps &
-                .or. modulo(md_istep, params%write_thermo) == 0) )then
-              !       Organize this better so that the user can have more freedom about what gets printed to thermo.log
-              !       There should also be a header preceded by # specifying what gets printed
-              write(10, "(I10, 1X, F16.6, 1X, F16.4, 1X, F20.8, 1X, F20.8, 1X, F20.8)", advance="no") &
-                   md_istep, md_time, instant_temp, E_kinetic, sum(energies), instant_pressure
-              if( params%write_lv )then
-                 write(10, "(1X, 9F20.8)", advance="no") a_box(1:3)/dfloat(indices(1)), &
-                      b_box(1:3)/dfloat(indices(2)), &
-                      c_box(1:3)/dfloat(indices(3))
+           if (rank == 0) then
+              !     Here we write thermodynamic information -> THIS NEEDS CLEAN UP AND IMPROVEMENT
+              if( md_istep == 0 .and. .not. params%do_nested_sampling )then
+                 open(unit=10, file="thermo.log", status="unknown")
+                 write(10,"(A,A)") "#     Step             Time      Temperature                E_kin                     E_pot", &
+                                   "             Pressure"
+              else if( md_istep == 0 .and. i_nested == 1 )then
+                 open(unit=10, file="thermo.log", status="unknown")
+                 write(10,"(A,A)") "#     Step             Time      Temperature                E_kin                     E_pot", &
+                                   "             Pressure"
+              else
+                 open(unit=10, file="thermo.log", status="old", position="append")
               end if
-              !       Further printouts should go here
-              !       <<HERE>>
-              !
-              !       This is to make the pointer advance
-              write(10, *)
+              if( .not. params%do_mc .and. (md_istep == 0 .or. md_istep == params%md_nsteps &
+                   .or. modulo(md_istep, params%write_thermo) == 0) )then
+                 !       Organize this better so that the user can have more freedom about what gets printed to thermo.log
+                 !       There should also be a header preceded by # specifying what gets printed
+                 write(10, "(I10, 1X, F16.6, 1X, F16.4, 1X, F20.8, 1X, F20.8, 1X, F20.8)", advance="no") &
+                      md_istep, md_time, instant_temp, E_kinetic, sum(energies), instant_pressure
+                 if( params%write_lv )then
+                    write(10, "(1X, 9F20.8)", advance="no") a_box(1:3)/dfloat(indices(1)), &
+                         b_box(1:3)/dfloat(indices(2)), &
+                         c_box(1:3)/dfloat(indices(3))
+                 end if
+                 !       Further printouts should go here
+                 !       <<HERE>>
+                 !
+                 !       This is to make the pointer advance
+                 write(10, *)
+              end if
+              close(10)
            end if
-           close(10)
            !
            !     Check if we have converged a relaxation calculation
            !     Check if we have converged a relaxation calculation
@@ -2419,37 +2421,39 @@ program turbogap
               if (params%do_mc ) exit_loop=.false.
            end if
 
-           !     We write out the trajectory file. We write positions_prev which is the one for which we have computed
-           !     the properties. positions_prev and velocities are synchronous
-           if( (md_istep == 0 .and. .not. params%do_nested_sampling) .or. &
-                (md_istep == params%md_nsteps .and. .not. params%do_nested_sampling) &
-                .or. (modulo(md_istep, params%write_xyz) == 0  .and. .not. params%do_nested_sampling) .or. &
-                exit_loop )then
-              call wrap_pbc(positions_prev(1:3,1:n_sites), a_box&
-                   &/dfloat(indices(1)), b_box/dfloat(indices(2)),&
-                   & c_box/dfloat(indices(3)))
-              call write_extxyz( n_sites, md_istep, time_step, md_time, &
-                   & instant_temp, instant_pressure, a_box&
-                   &/dfloat(indices(1)), b_box/dfloat(indices(2)),&
-                   & c_box/dfloat(indices(3)), virial, xyz_species,&
-                   & positions_prev(1:3, 1:n_sites), velocities,&
-                   & forces, energies(1:n_sites), masses, hirshfeld_v&
-                   &, params%write_property, params&
-                   &%write_array_property, fix_atom(1:3, 1:n_sites),&
-                   & "trajectory_out.xyz", md_istep == 0)
-           else if( md_istep == params%md_nsteps .and. params%do_nested_sampling )then
-              write(cjunk,'(I8)') i_image
-              write(filename,'(A,A,A)') "walkers/", trim(adjustl(cjunk)), ".xyz"
-              call wrap_pbc(positions_prev(1:3,1:n_sites), &
-                   a_box/dfloat(indices(1)), b_box/dfloat(indices(2)), c_box/dfloat(indices(3)))
-              call write_extxyz( n_sites, md_istep, time_step, md_time, instant_temp, instant_pressure, &
-                   a_box/dfloat(indices(1)), b_box/dfloat(indices(2)), c_box/dfloat(indices(3)), &
-                   virial, xyz_species, &
-                   positions_prev(1:3, 1:n_sites), velocities, &
-                   forces, energies(1:n_sites), masses, hirshfeld_v, &
-                   params%write_property, params%write_array_property, fix_atom(1:3, 1:n_sites), &
-                   filename, .false. )
+           if (rank == 0) then
+              !     We write out the trajectory file. We write positions_prev which is the one for which we have computed
+              !     the properties. positions_prev and velocities are synchronous
+              if( (md_istep == 0 .and. .not. params%do_nested_sampling) .or. &
+                   (md_istep == params%md_nsteps .and. .not. params%do_nested_sampling) &
+                   .or. (modulo(md_istep, params%write_xyz) == 0  .and. .not. params%do_nested_sampling) .or. &
+                   exit_loop )then
+                 call wrap_pbc(positions_prev(1:3,1:n_sites), a_box&
+                      &/dfloat(indices(1)), b_box/dfloat(indices(2)),&
+                      & c_box/dfloat(indices(3)))
+                 call write_extxyz( n_sites, md_istep, time_step, md_time, &
+                      & instant_temp, instant_pressure, a_box&
+                      &/dfloat(indices(1)), b_box/dfloat(indices(2)),&
+                      & c_box/dfloat(indices(3)), virial, xyz_species,&
+                      & positions_prev(1:3, 1:n_sites), velocities,&
+                      & forces, energies(1:n_sites), masses, hirshfeld_v&
+                      &, params%write_property, params&
+                      &%write_array_property, fix_atom(1:3, 1:n_sites),&
+                      & "trajectory_out.xyz", md_istep == 0)
+              else if( md_istep == params%md_nsteps .and. params%do_nested_sampling )then
+                 write(cjunk,'(I8)') i_image
+                 write(filename,'(A,A,A)') "walkers/", trim(adjustl(cjunk)), ".xyz"
+                 call wrap_pbc(positions_prev(1:3,1:n_sites), &
+                      a_box/dfloat(indices(1)), b_box/dfloat(indices(2)), c_box/dfloat(indices(3)))
+                 call write_extxyz( n_sites, md_istep, time_step, md_time, instant_temp, instant_pressure, &
+                      a_box/dfloat(indices(1)), b_box/dfloat(indices(2)), c_box/dfloat(indices(3)), &
+                      virial, xyz_species, &
+                      positions_prev(1:3, 1:n_sites), velocities, &
+                      forces, energies(1:n_sites), masses, hirshfeld_v, &
+                      params%write_property, params%write_array_property, fix_atom(1:3, 1:n_sites), &
+                      filename, .false. )
 
+              end if
            end if
            !
            !     If there are pressure/box rescaling operations they happen here
