@@ -2033,10 +2033,17 @@ program turbogap
            energies = energies + energies_soap + energies_2b + energies_3b + energies_core_pot + energies_vdw
            energy_prev = energy
            instant_pressure_prev = instant_pressure
-           energy = sum(energies)
            if (params%do_dd) then
+              if (rank == 0) then
+                 global_energies = global_energies + global_energies_soap &
+                                 + global_energies_2b + global_energies_3b &
+                                 + global_energies_core_pot + global_energies_vdw
+                 energy = sum(global_energies)
+              end if
               ! broadcast the global energy (at rank 0) to everyone
               call mpi_bcast(energy, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+           else
+              energy = sum(energies)
            end if
         end if
 
@@ -2074,6 +2081,22 @@ program turbogap
         if( params%do_forces )then
            forces = forces_soap + forces_2b + forces_3b + forces_core_pot + forces_vdw
            virial = virial_soap + virial_2b + virial_3b + virial_core_pot + virial_vdw
+           if (params%do_dd) then
+              if (rank == 0) then
+                 global_forces = global_forces_soap + global_forces_2b &
+                               + global_forces_3b + global_forces_core_pot &
+                               + global_forces_vdw
+                 global_virial = global_virial_soap + global_virial_2b &
+                               + global_virial_3b + global_virial_core_pot &
+                               + global_virial_vdw
+                 ! broadcast the global forces and virials (at rank 0) to everyone
+                 ! FIXME: are global forces needed? if not, remove
+                 call mpi_bcast(global_forces, n_sites_global, MPI_DOUBLE_PRECISION, &
+                                0, MPI_COMM_WORLD, ierr)
+                 call mpi_bcast(global_virial, 9, MPI_DOUBLE_PRECISION, &
+                                0, MPI_COMM_WORLD, ierr)
+              end if
+           end if
 
            if ( params%print_vdw_forces )then
               open(unit=90, file="forces_vdw", status="unknown")
@@ -2089,11 +2112,19 @@ program turbogap
 
         ! For debugging the virial implementation
         if( rank == 0 .and. .false. )then
-           write(*,*) "pressure_soap: ", virial_soap / 3.d0 / v_uc
-           write(*,*) "pressure_vdw: ", virial_vdw / 3.d0 / v_uc
-           write(*,*) "pressure_2b: ", virial_2b / 3.d0 / v_uc
-           write(*,*) "pressure_3b: ", virial_3b / 3.d0 / v_uc
-           write(*,*) "pressure_core_pot: ", virial_core_pot / 3.d0 / v_uc
+           if (params%do_dd) then
+              write(*,*) "pressure_soap: ", global_virial_soap / 3.d0 / v_uc
+              write(*,*) "pressure_vdw: ", global_virial_vdw / 3.d0 / v_uc
+              write(*,*) "pressure_2b: ", global_virial_2b / 3.d0 / v_uc
+              write(*,*) "pressure_3b: ", global_virial_3b / 3.d0 / v_uc
+              write(*,*) "pressure_core_pot: ", global_virial_core_pot / 3.d0 / v_uc
+           else
+              write(*,*) "pressure_soap: ", virial_soap / 3.d0 / v_uc
+              write(*,*) "pressure_vdw: ", virial_vdw / 3.d0 / v_uc
+              write(*,*) "pressure_2b: ", virial_2b / 3.d0 / v_uc
+              write(*,*) "pressure_3b: ", virial_3b / 3.d0 / v_uc
+              write(*,*) "pressure_core_pot: ", virial_core_pot / 3.d0 / v_uc
+           end if
         end if
 
 
