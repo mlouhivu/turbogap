@@ -1045,7 +1045,6 @@ subroutine migration_mask(mask, border, norm, n_pos)
        call exchange_mask(mask(1:6, s:e), local_border, norm(s:e, 1:3), &
                           n_recv, rcut_max)
     end do
-    ! FIXME: update n_sites_ghost?
     ! deallocate buffers
     deallocate(buffer_ids)
     deallocate(buffer_positions)
