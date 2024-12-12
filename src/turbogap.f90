@@ -1209,9 +1209,10 @@ program turbogap
                               species_supercell, fix_atom, params%dd_debug)
         end if
         call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, local_comm, ierr)
-        call mpi_bcast(n_pos, 1, MPI_INTEGER, 0, local_comm, ierr)
-        call mpi_bcast(n_sp, 1, MPI_INTEGER, 0, local_comm, ierr)
-        call mpi_bcast(n_sp_sc, 1, MPI_INTEGER, 0, local_comm, ierr)
+        ! FIXME:  assuming n_sites == n_pos == n_sp == n_sp_sc
+        n_pos = n_sites
+        n_sp = n_sites
+        n_sp_sc = n_sites
         call mpi_bcast(n_alloc, 1, MPI_INTEGER, 0, local_comm, ierr)
         if (local_rank /= 0 .and. n_alloc /= size(ids)) then
            ! reallocate arrays to match the new size
@@ -1292,16 +1293,16 @@ program turbogap
 
 #ifdef _MPIF90
      !   This is some trivial MPI parallelization to make sure the code works fine
-     if( local_rank < mod( n_sites, local_ntasks ) )then
-        i_beg = 1 + local_rank*(n_sites / local_ntasks + 1)
+     if( local_rank < mod( n_sites_local, local_ntasks ) )then
+        i_beg = 1 + local_rank*(n_sites_local / local_ntasks + 1)
      else
-        i_beg = 1 + mod(n_sites, local_ntasks)*(n_sites / local_ntasks + 1) &
-              + (local_rank - mod( n_sites, local_ntasks))*(n_sites / local_ntasks)
+        i_beg = 1 + mod(n_sites_local, local_ntasks)*(n_sites_local / local_ntasks + 1) &
+              + (local_rank - mod( n_sites_local, local_ntasks))*(n_sites_local / local_ntasks)
      end if
-     if( local_rank < mod( n_sites, local_ntasks ) )then
-        i_end = (local_rank+1)*(n_sites / local_ntasks + 1)
+     if( local_rank < mod( n_sites_local, local_ntasks ) )then
+        i_end = (local_rank+1)*(n_sites_local / local_ntasks + 1)
      else
-        i_end = i_beg + n_sites/local_ntasks - 1
+        i_end = i_beg + n_sites_local/local_ntasks - 1
      end if
 
      do_list = .false.
@@ -1319,10 +1320,10 @@ program turbogap
 ! #endif
 !      end if
 
-     call build_neighbors_list(positions, a_box, b_box, c_box, params%do_timing, &
+     call build_neighbors_list(positions(1:3, 1:n_pos), a_box, b_box, c_box, params%do_timing, &
           species_supercell, rcut_max, n_atom_pairs, rjs, &
           thetas, phis, xyz, n_neigh_local, neighbors_list, neighbor_species, n_sites, indices, &
-          rebuild_neighbors_list, do_list, rank )
+          rebuild_neighbors_list, do_list, rank)
      if( rebuild_neighbors_list )then
         !     Get total number of atom pairs
         if (params%do_dd) then
@@ -1344,7 +1345,7 @@ program turbogap
         end if
 
         j_beg = 1
-        j_end = n_atom_pairs_by_rank(rank+1)
+        j_end = n_atom_pairs_by_rank(local_rank+1)
      end if
 #else
      call build_neighbors_list(positions, a_box, b_box, c_box, params%do_timing, &
@@ -1526,7 +1527,7 @@ program turbogap
                    soap_turbo_hypers(i)%compress_P_i, soap_turbo_hypers(i)%compress_P_j, &
                    soap_turbo_hypers(i)%compress_P_el, &
                    soap_turbo_hypers(i)%delta, soap_turbo_hypers(i)%zeta, soap_turbo_hypers(i)%central_species, &
-                   xyz_species(this_i_beg:this_i_end), xyz_species_supercell, soap_turbo_hypers(i)%alphas, &
+                   xyz_species(this_i_beg:this_i_end), xyz_species_supercell(1:n_sp_sc), soap_turbo_hypers(i)%alphas, &
                    soap_turbo_hypers(i)%Qs, params%all_atoms, params%which_atom, indices, soap, soap_cart_der, &
                    der_neighbors, der_neighbors_list, &
                    soap_turbo_hypers(i)%has_vdw, soap_turbo_hypers(i)%vdw_Qs, soap_turbo_hypers(i)%vdw_alphas, &
@@ -2095,7 +2096,7 @@ program turbogap
                                + global_virial_vdw
                  ! broadcast the global forces and virials (at rank 0) to everyone
                  ! FIXME: are global forces needed? if not, remove
-                 call mpi_bcast(global_forces, n_sites_global, MPI_DOUBLE_PRECISION, &
+                 call mpi_bcast(global_forces, 3 * n_sites_global, MPI_DOUBLE_PRECISION, &
                                 0, MPI_COMM_WORLD, ierr)
                  call mpi_bcast(global_virial, 9, MPI_DOUBLE_PRECISION, &
                                 0, MPI_COMM_WORLD, ierr)

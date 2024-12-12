@@ -89,6 +89,7 @@ module gap_interface
 !   CLEAN THIS UP
     real*8 :: time1, time2
 
+    n_sites = size(xyz_species)
     n_sites_supercell = size(xyz_species_supercell)
 
 
@@ -107,8 +108,8 @@ module gap_interface
       end if
     end do
     n_atom_pairs = size(rjs0)
-    call assign_species_multiplicity(max_species_multiplicity, species_types, xyz_species, &
-                                     xyz_species_supercell, n_species, all_atoms, which_atom, &
+    call assign_species_multiplicity(max_species_multiplicity, species_types, xyz_species(1:n_sites), &
+                                     xyz_species_supercell(1:n_sites_supercell), n_species, all_atoms, which_atom, &
                                      indices, n_neigh0, n_atom_pairs, neighbors_list0, mask0, &
                                      species0, species_multiplicity0, &
                                      species_multiplicity_supercell )
