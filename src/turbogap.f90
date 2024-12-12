@@ -1972,44 +1972,44 @@ program turbogap
               do i = 2, global_ntasks
                  distribute_displs(i) = distribute_displs(i-1) + distribute_counts(i-1)
               end do
-              call mpi_gatherv(energies_soap, n_sites, MPI_DOUBLE_PRECISION, &
+              call mpi_gatherv(energies_soap, n_sites_local, MPI_DOUBLE_PRECISION, &
                                global_energies_soap, distribute_counts, &
                                distribute_displs, MPI_DOUBLE_PRECISION, &
                                0, global_comm, ierr)
-              call mpi_gatherv(energies_vdw, n_sites, MPI_DOUBLE_PRECISION, &
+              call mpi_gatherv(energies_vdw, n_sites_local, MPI_DOUBLE_PRECISION, &
                                global_energies_vdw, distribute_counts, &
                                distribute_displs, MPI_DOUBLE_PRECISION, &
                                0, global_comm, ierr)
-              call mpi_gatherv(energies_2b, n_sites, MPI_DOUBLE_PRECISION, &
+              call mpi_gatherv(energies_2b, n_sites_local, MPI_DOUBLE_PRECISION, &
                                global_energies_2b, distribute_counts, &
                                distribute_displs, MPI_DOUBLE_PRECISION, &
                                0, global_comm, ierr)
-              call mpi_gatherv(energies_core_pot, n_sites, MPI_DOUBLE_PRECISION, &
+              call mpi_gatherv(energies_core_pot, n_sites_local, MPI_DOUBLE_PRECISION, &
                                global_energies_core_pot, distribute_counts, &
                                distribute_displs, MPI_DOUBLE_PRECISION, &
                                0, global_comm, ierr)
-              call mpi_gatherv(energies_3b, n_sites, MPI_DOUBLE_PRECISION, &
+              call mpi_gatherv(energies_3b, n_sites_local, MPI_DOUBLE_PRECISION, &
                                global_energies_3b, distribute_counts, &
                                distribute_displs, MPI_DOUBLE_PRECISION, &
                                0, global_comm, ierr)
               if (params%do_forces) then
-                 call mpi_gatherv(forces_soap, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                 call mpi_gatherv(forces_soap, n_sites_local * 3, MPI_DOUBLE_PRECISION, &
                                   global_forces_soap, distribute_counts * 3, &
                                   distribute_displs * 3, MPI_DOUBLE_PRECISION, &
                                   0, global_comm, ierr)
-                 call mpi_gatherv(forces_vdw, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                 call mpi_gatherv(forces_vdw, n_sites_local * 3, MPI_DOUBLE_PRECISION, &
                                   global_forces_vdw, distribute_counts * 3, &
                                   distribute_displs * 3, MPI_DOUBLE_PRECISION, &
                                   0, global_comm, ierr)
-                 call mpi_gatherv(forces_2b, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                 call mpi_gatherv(forces_2b, n_sites_local * 3, MPI_DOUBLE_PRECISION, &
                                   global_forces_2b, distribute_counts * 3, &
                                   distribute_displs * 3, MPI_DOUBLE_PRECISION, &
                                   0, global_comm, ierr)
-                 call mpi_gatherv(forces_core_pot, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                 call mpi_gatherv(forces_core_pot, n_sites_local * 3, MPI_DOUBLE_PRECISION, &
                                   global_forces_core_pot, distribute_counts * 3, &
                                   distribute_displs * 3, MPI_DOUBLE_PRECISION, &
                                   0, global_comm, ierr)
-                 call mpi_gatherv(forces_3b, n_sites * 3, MPI_DOUBLE_PRECISION, &
+                 call mpi_gatherv(forces_3b, n_sites_local * 3, MPI_DOUBLE_PRECISION, &
                                   global_forces_3b, distribute_counts * 3, &
                                   distribute_displs * 3, MPI_DOUBLE_PRECISION, &
                                   0, global_comm, ierr)
