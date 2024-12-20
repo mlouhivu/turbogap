@@ -162,7 +162,7 @@ program turbogap
   character*8, allocatable :: buffer_xyz_species(:), &
                               buffer_xyz_species_supercell(:)
   real*8, allocatable :: global_positions(:,:), global_velocities(:,:), &
-                         global_masses(:)
+                         global_masses(:), global_positions_prev(:,:)
   integer, allocatable :: global_species(:), global_species_supercell(:)
   logical, allocatable :: global_fix_atom(:,:)
   character*8, allocatable :: global_xyz_species(:), &
@@ -1021,6 +1021,7 @@ program turbogap
                                   params%dd_grid(1) * params%dd_grid(2) &
                                   * params%dd_grid(3))
               allocate(global_positions(1:3, n_pos))
+              allocate(global_positions_prev(1:3, n_pos))
               allocate(global_velocities(1:3, n_sp))
               allocate(global_masses(n_sp))
               allocate(global_species(n_sp))
@@ -2459,38 +2460,94 @@ program turbogap
               if (params%do_mc ) exit_loop=.false.
            end if
 
+           if (params%do_dd .and. local_rank == 0) then
+              if ((md_istep == params%md_nsteps .and. .not. params%do_nested_sampling) &
+                  .or. (modulo(md_istep, params%write_xyz) == 0 .and. .not. params%do_nested_sampling) &
+                  .or. exit_loop) then
+                 ! gather global_positions_prev
+                 call mpi_gather(n_sites_local, 1, MPI_INTEGER, &
+                                 distribute_counts, 1, MPI_INTEGER, &
+                                 0, global_comm, ierr)
+                 distribute_displs(1) = 0
+                 do i = 2, global_ntasks
+                    distribute_displs(i) = distribute_displs(i-1) + distribute_counts(i-1)
+                 end do
+                 call mpi_gatherv(positions_prev, n_sites_local * 3, MPI_DOUBLE_PRECISION, &
+                                  global_positions_prev, distribute_counts * 3, &
+                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
+                                  0, global_comm, ierr)
+                 call mpi_gatherv(velocities, n_sites_local * 3, MPI_DOUBLE_PRECISION, &
+                                  global_velocities, distribute_counts * 3, &
+                                  distribute_displs * 3, MPI_DOUBLE_PRECISION, &
+                                  0, global_comm, ierr)
+                 call mpi_gatherv(ids, n_sites_local, MPI_INTEGER, &
+                                  global_ids, distribute_counts, &
+                                  distribute_displs, MPI_INTEGER, &
+                                  0, global_comm, ierr)
+                 ! reorder to the correct order for output based on IDs
+                 !   note: other global arrays are already in the correct order
+                 if (global_rank == 0) then
+                    do i = 1, n_sites_global
+                       sort_order(global_ids(i)) = i
+                    end do
+                    global_positions_prev = global_positions_prev(:,sort_order)
+                    global_velocities = global_velocities(:,sort_order)
+                 end if
+              end if
+           end if
            if (rank == 0) then
               !     We write out the trajectory file. We write positions_prev which is the one for which we have computed
               !     the properties. positions_prev and velocities are synchronous
-              if( (md_istep == 0 .and. .not. params%do_nested_sampling) .or. &
-                   (md_istep == params%md_nsteps .and. .not. params%do_nested_sampling) &
-                   .or. (modulo(md_istep, params%write_xyz) == 0  .and. .not. params%do_nested_sampling) .or. &
-                   exit_loop )then
-                 call wrap_pbc(positions_prev(1:3,1:n_sites), a_box&
-                      &/dfloat(indices(1)), b_box/dfloat(indices(2)),&
-                      & c_box/dfloat(indices(3)))
-                 call write_extxyz( n_sites, md_istep, time_step, md_time, &
-                      & instant_temp, instant_pressure, a_box&
-                      &/dfloat(indices(1)), b_box/dfloat(indices(2)),&
-                      & c_box/dfloat(indices(3)), virial, xyz_species,&
-                      & positions_prev(1:3, 1:n_sites), velocities,&
-                      & forces, energies(1:n_sites), masses, hirshfeld_v&
-                      &, params%write_property, params&
-                      &%write_array_property, fix_atom(1:3, 1:n_sites),&
-                      & "trajectory_out.xyz", md_istep == 0)
-              else if( md_istep == params%md_nsteps .and. params%do_nested_sampling )then
-                 write(cjunk,'(I8)') i_image
-                 write(filename,'(A,A,A)') "walkers/", trim(adjustl(cjunk)), ".xyz"
-                 call wrap_pbc(positions_prev(1:3,1:n_sites), &
-                      a_box/dfloat(indices(1)), b_box/dfloat(indices(2)), c_box/dfloat(indices(3)))
-                 call write_extxyz( n_sites, md_istep, time_step, md_time, instant_temp, instant_pressure, &
-                      a_box/dfloat(indices(1)), b_box/dfloat(indices(2)), c_box/dfloat(indices(3)), &
-                      virial, xyz_species, &
-                      positions_prev(1:3, 1:n_sites), velocities, &
-                      forces, energies(1:n_sites), masses, hirshfeld_v, &
-                      params%write_property, params%write_array_property, fix_atom(1:3, 1:n_sites), &
-                      filename, .false. )
+              if (params%do_dd) then
+                 call wrap_pbc(global_positions_prev(1:3,1:n_sites_global), &
+                               a_box / dfloat(indices(1)), &
+                               b_box / dfloat(indices(2)), &
+                               c_box/dfloat(indices(3)))
+                 call write_extxyz(n_sites_global, md_istep, time_step, &
+                                   md_time, instant_temp, instant_pressure, &
+                                   a_box / dfloat(indices(1)), &
+                                   b_box / dfloat(indices(2)), &
+                                   c_box / dfloat(indices(3)), &
+                                   global_virial, global_xyz_species, &
+                                   global_positions_prev(1:3, 1:n_sites_global), &
+                                   global_velocities, global_forces, &
+                                   global_energies(1:n_sites_global), &
+                                   global_masses, hirshfeld_v, &
+                                   params%write_property, &
+                                   params%write_array_property, &
+                                   global_fix_atom(1:3, 1:n_sites_global), &
+                                   "trajectory_out.xyz", md_istep == 0)
+              else
+                 if( (md_istep == 0 .and. .not. params%do_nested_sampling) .or. &
+                      (md_istep == params%md_nsteps .and. .not. params%do_nested_sampling) &
+                      .or. (modulo(md_istep, params%write_xyz) == 0  .and. .not. params%do_nested_sampling) .or. &
+                      exit_loop )then
+                    call wrap_pbc(positions_prev(1:3,1:n_sites), a_box&
+                         &/dfloat(indices(1)), b_box/dfloat(indices(2)),&
+                         & c_box/dfloat(indices(3)))
+                    call write_extxyz( n_sites, md_istep, time_step, md_time, &
+                         & instant_temp, instant_pressure, a_box&
+                         &/dfloat(indices(1)), b_box/dfloat(indices(2)),&
+                         & c_box/dfloat(indices(3)), virial, xyz_species,&
+                         & positions_prev(1:3, 1:n_sites), velocities,&
+                         & forces, energies(1:n_sites), masses, hirshfeld_v&
+                         &, params%write_property, params&
+                         &%write_array_property, fix_atom(1:3, 1:n_sites),&
+                         & "trajectory_out.xyz", md_istep == 0)
+                 else if( md_istep == params%md_nsteps .and. params%do_nested_sampling )then
+                    write(cjunk,'(I8)') i_image
+                    write(filename,'(A,A,A)') "walkers/", trim(adjustl(cjunk)), ".xyz"
+                    call wrap_pbc(positions_prev(1:3,1:n_sites), &
+                         a_box/dfloat(indices(1)), b_box/dfloat(indices(2)), c_box/dfloat(indices(3)))
+                    call write_extxyz( n_sites, md_istep, time_step, md_time, instant_temp, instant_pressure, &
+                         a_box/dfloat(indices(1)), b_box/dfloat(indices(2)), c_box/dfloat(indices(3)), &
+                         virial, xyz_species, &
+                         positions_prev(1:3, 1:n_sites), velocities, &
+                         forces, energies(1:n_sites), masses, hirshfeld_v, &
+                         params%write_property, params%write_array_property, fix_atom(1:3, 1:n_sites), &
+                         filename, .false. )
 
+                 end if
               end if
            end if
            !
