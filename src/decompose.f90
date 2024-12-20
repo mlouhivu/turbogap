@@ -855,16 +855,15 @@ subroutine migration_mask(mask, border, norm, n_pos)
     integer :: src, tgt
     integer :: n_send, n_recv
     integer :: n_send_alloc=0
-    integer :: n_recv_alloc=0
     real*8 :: local_border(6)
     integer :: status(MPI_STATUS_SIZE)
     integer, allocatable :: buffer_ids(:)
-    real*8, allocatable :: buffer_positions(:,:), rbuffer_positions(:,:)
-    real*8, allocatable :: buffer_velocities(:,:), rbuffer_velocities(:,:)
+    real*8, allocatable :: buffer_positions(:,:)
+    real*8, allocatable :: buffer_velocities(:,:)
     real*8, allocatable :: buffer_masses(:)
     integer, allocatable :: buffer_species(:)
     integer, allocatable :: buffer_species_supercell(:)
-    logical, allocatable :: buffer_fix_atom(:,:), rbuffer_fix_atom(:,:)
+    logical, allocatable :: buffer_fix_atom(:,:)
     character*8, allocatable :: buffer_xyz_species(:)
     character*8, allocatable :: buffer_xyz_species_supercell(:)
     integer, allocatable :: tmp_ids(:)
@@ -924,20 +923,6 @@ subroutine migration_mask(mask, border, norm, n_pos)
           allocate(buffer_fix_atom(3, n_send_alloc))
           if (debug) then
              write(*,*) "send buffers allocated:", n_send_alloc
-          end if
-       end if
-       if (n_recv_alloc < n_recv) then
-          if (n_recv_alloc > 0) then
-             deallocate(rbuffer_positions)
-             deallocate(rbuffer_velocities)
-             deallocate(rbuffer_fix_atom)
-          end if
-          n_recv_alloc = n_recv * 2
-          allocate(rbuffer_positions(3, n_recv_alloc))
-          allocate(rbuffer_velocities(3, n_recv_alloc))
-          allocate(rbuffer_fix_atom(3, n_recv_alloc))
-          if (debug) then
-             write(*,*) "receive buffers allocated:", n_recv_alloc
           end if
        end if
        ! copy ghost sites to send buffers
@@ -1017,16 +1002,14 @@ subroutine migration_mask(mask, border, norm, n_pos)
                          grid_comm, status, ierr)
        call mpi_sendrecv(buffer_positions, 3 * n_send, &
                          MPI_DOUBLE_PRECISION, tgt, 0, &
-                         rbuffer_positions, 3 * n_recv, &
+                         positions(1:3, s:e), 3 * n_recv, &
                          MPI_DOUBLE_PRECISION, src, 0, &
                          grid_comm, status, ierr)
-       positions(1:3, s:e) = rbuffer_positions(1:3, 1:n_recv)
        call mpi_sendrecv(buffer_velocities, 3 * n_send, &
                          MPI_DOUBLE_PRECISION, tgt, 0, &
-                         rbuffer_velocities, 3 * n_recv, &
+                         velocities(1:3, s:e), 3 * n_recv, &
                          MPI_DOUBLE_PRECISION, src, 0, &
                          grid_comm, status, ierr)
-       velocities(1:3, s:e) = rbuffer_velocities(1:3, 1:n_recv)
        call mpi_sendrecv(buffer_masses, n_send, &
                          MPI_DOUBLE_PRECISION, tgt, 0, &
                          masses(s:e), n_recv, &
@@ -1054,10 +1037,9 @@ subroutine migration_mask(mask, border, norm, n_pos)
                          grid_comm, status, ierr)
        call mpi_sendrecv(buffer_fix_atom, 3 * n_send, &
                          MPI_LOGICAL, tgt, 0, &
-                         rbuffer_fix_atom, 3 * n_recv, &
+                         fix_atom(1:3, s:e), 3 * n_recv, &
                          MPI_LOGICAL, src, 0, &
                          grid_comm, status, ierr)
-       fix_atom(1:3, s:e) = rbuffer_fix_atom(1:3, 1:n_recv)
        n_sites = n_sites + n_recv
        ! calculate new norms and update masks
        call vectorised_projection(norm(1:3, s:e), surface, &
@@ -1075,9 +1057,6 @@ subroutine migration_mask(mask, border, norm, n_pos)
     deallocate(buffer_xyz_species_supercell)
     deallocate(buffer_species_supercell)
     deallocate(buffer_fix_atom)
-    deallocate(rbuffer_positions)
-    deallocate(rbuffer_velocities)
-    deallocate(rbuffer_fix_atom)
   end subroutine
 !**************************************************************************
 
