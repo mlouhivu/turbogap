@@ -1132,6 +1132,9 @@ program turbogap
         call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
         call cpu_time(time_mpi(2))
         time_mpi(3) = time_mpi(3) + time_mpi(2) - time_mpi(1)
+        ! if no domains, all sites ares both "local" and "global"
+        n_sites_global = n_sites
+        n_sites_local = n_sites
 
         if(allocated(positions))deallocate(positions)
         allocate( positions(1:3, n_pos) )
