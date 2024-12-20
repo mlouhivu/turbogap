@@ -2140,6 +2140,12 @@ program turbogap
                                + global_virial_3b + global_virial_core_pot &
                                + global_virial_vdw
               end if
+              ! broadcast local forces and virials
+              ! FIXME: are these needed? if not, remove
+              call mpi_bcast(forces, 3 * n_sites_local, MPI_DOUBLE_PRECISION, &
+                             0, local_comm, ierr)
+              call mpi_bcast(virial, 9, MPI_DOUBLE_PRECISION, &
+                             0, local_comm, ierr)
               ! broadcast the global forces and virials (at rank 0) to everyone
               ! FIXME: are global forces needed? if not, remove
               call mpi_bcast(global_forces, 3 * n_sites_global, MPI_DOUBLE_PRECISION, &
