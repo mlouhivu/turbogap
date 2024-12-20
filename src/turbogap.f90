@@ -2129,8 +2129,10 @@ program turbogap
 
 
         if( params%do_forces )then
-           forces = forces_soap + forces_2b + forces_3b + forces_core_pot + forces_vdw
-           virial = virial_soap + virial_2b + virial_3b + virial_core_pot + virial_vdw
+           if (local_rank == 0) then
+              forces = forces_soap + forces_2b + forces_3b + forces_core_pot + forces_vdw
+              virial = virial_soap + virial_2b + virial_3b + virial_core_pot + virial_vdw
+           end if
            if (params%do_dd) then
               if (rank == 0) then
                  global_forces = global_forces_soap + global_forces_2b &
@@ -2152,6 +2154,8 @@ program turbogap
                              0, MPI_COMM_WORLD, ierr)
               call mpi_bcast(global_virial, 9, MPI_DOUBLE_PRECISION, &
                              0, MPI_COMM_WORLD, ierr)
+           else
+              global_virial = virial
            end if
 
            if ( params%print_vdw_forces )then
