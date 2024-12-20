@@ -218,7 +218,6 @@ program turbogap
   rank = 0
   ntasks = 1
 #endif
-  allocate( n_atom_pairs_by_rank(1:ntasks) )
   !**************************************************************************
 
 
@@ -658,6 +657,7 @@ program turbogap
     local_rank = rank
   end if
 #endif
+  allocate( n_atom_pairs_by_rank(1:local_ntasks) )
   call cpu_time(time_read_input(2))
   time_read_input(3) = time_read_input(3) + time_read_input(2) - time_read_input(1)
   !**************************************************************************
@@ -1119,6 +1119,7 @@ program turbogap
                         positions_prev, forces_prev, params%dd_debug)
         end if
         call mpi_bcast(n_sites_local, 1, MPI_INTEGER, 0, local_comm, ierr)
+        rebuild_neighbors_list = .true.
      else
         call cpu_time(time_mpi(1))
         call mpi_bcast(n_pos, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
@@ -1330,23 +1331,22 @@ program turbogap
 
      do_list = .false.
      do_list(i_beg:i_end) = .true.
-!      if( rebuild_neighbors_list )then
-!         if(allocated( rjs))deallocate( rjs)
-!         if(allocated( xyz))deallocate( xyz)
-!         if(allocated( thetas))deallocate( thetas)
-!         if(allocated( phis))deallocate( phis)
-!         if(allocated( neighbor_species ))deallocate( neighbor_species )
-!         if(allocated( neighbors_list))deallocate( neighbors_list )
-!         if(allocated(n_neigh))deallocate( n_neigh )
-! #ifdef _MPIF90
-!         if(allocated(n_neigh_local))deallocate( n_neigh_local )
-! #endif
-!      end if
+
+     if (rebuild_neighbors_list) then
+        if(allocated(rjs)) deallocate(rjs)
+        if(allocated(xyz)) deallocate(xyz)
+        if(allocated(thetas)) deallocate(thetas)
+        if(allocated(phis)) deallocate(phis)
+        if(allocated(neighbor_species)) deallocate(neighbor_species)
+        if(allocated(neighbors_list)) deallocate(neighbors_list)
+        if(allocated(n_neigh)) deallocate(n_neigh)
+        if(allocated(n_neigh_local)) deallocate(n_neigh_local)
+     end if
 
      call build_neighbors_list(positions(1:3, 1:n_pos), a_box, b_box, c_box, params%do_timing, &
           species_supercell, rcut_max, n_atom_pairs, rjs, &
-          thetas, phis, xyz, n_neigh_local, neighbors_list, neighbor_species, n_sites, indices, &
-          rebuild_neighbors_list, do_list, rank)
+          thetas, phis, xyz, n_neigh_local, neighbors_list, neighbor_species, n_sites_local, indices, &
+          rebuild_neighbors_list, do_list, local_rank)
      if( rebuild_neighbors_list )then
         !     Get total number of atom pairs
         if (params%do_dd) then
@@ -2619,7 +2619,9 @@ program turbogap
               end if
            end if
            !     Check what's the maximum atomic displacement since last neighbors build
-           positions_diff = positions_diff + positions(1:3, 1:n_sites) - positions_prev(1:3, 1:n_sites)
+           positions_diff(1:3, 1:n_sites_local) = positions_diff(1:3, 1:n_sites_local) &
+                                                + positions(1:3, 1:n_sites_local) &
+                                                - positions_prev(1:3, 1:n_sites_local)
            rebuild_neighbors_list = .false.
            !--------
            ! CHECK THIS OUT and fix it at some point
@@ -2633,13 +2635,17 @@ program turbogap
               rebuild_neighbors_list = .true.
            end if
            !--------
-           do i = 1, n_sites
+           do i = 1, n_sites_local
               if( positions_diff(1, i)**2 + positions_diff(2, i)**2 + positions_diff(3, i)**2 > params%neighbors_buffer/2.d0 )then
                  rebuild_neighbors_list = .true.
                  positions_diff = 0.d0
                  exit
               end if
            end do
+           if (params%do_dd) then
+              call mpi_allreduce(MPI_IN_PLACE, rebuild_neighbors_list, 1, &
+                                 MPI_LOGICAL, MPI_LOR, global_comm, ierr)
+           end if
            !       We make sure the atoms in the supercell have the same positions and velocities as in the unit cell
            j = 0
            do i2 = 1, indices(1)
@@ -2662,7 +2668,11 @@ program turbogap
         end if
 #ifdef _MPIF90
      END IF
-     call mpi_bcast(rebuild_neighbors_list, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, ierr)
+     if (params%do_dd) then
+        call mpi_bcast(rebuild_neighbors_list, 1, MPI_LOGICAL, 0, local_comm, ierr)
+     else
+        call mpi_bcast(rebuild_neighbors_list, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, ierr)
+     end if
 #endif
      !   Make sure all ranks have correct positions and velocities
 #ifdef _MPIF90
@@ -3353,7 +3363,11 @@ program turbogap
      call cpu_time(time1)
 #ifdef _MPIF90
      !   Parallel neighbors list build
-     call mpi_bcast(rebuild_neighbors_list, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, ierr)
+     if (params%do_dd) then
+        call mpi_bcast(rebuild_neighbors_list, 1, MPI_LOGICAL, 0, local_comm, ierr)
+     else
+        call mpi_bcast(rebuild_neighbors_list, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, ierr)
+     end if
 #endif
 
 
@@ -3386,7 +3400,7 @@ program turbogap
      end if
 
      if (.not. params%do_mc )n_sites_prev = n_sites
-     n_atom_pairs_by_rank_prev = n_atom_pairs_by_rank(rank+1)
+     n_atom_pairs_by_rank_prev = n_atom_pairs_by_rank(local_rank+1)
 
 #ifdef _MPIF90
      call mpi_bcast(exit_loop, 1, MPI_LOGICAL, 0, MPI_COMM_WORLD, ierr)
