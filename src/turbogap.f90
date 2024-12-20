@@ -850,6 +850,10 @@ program turbogap
 
            end if
 
+#ifdef _MPIF90
+        END IF
+        IF( local_rank == 0 )THEN
+#endif
            ! call read_xyz(params%atoms_file, .true., params%all_atoms, params%do_timing, &
            !               n_species, params%species_types, repeat_xyz, rcut_max, params%which_atom, &
            !               positions, params%do_md, velocities, params%masses_types, masses, xyz_species, &
