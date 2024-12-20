@@ -538,7 +538,8 @@ subroutine migration_mask(mask, border, norm, n_pos)
                      n_sites, n_pos, n_sp, n_sp_sc, &
                      ids, positions, velocities, masses, xyz_species, &
                      species, xyz_species_supercell, species_supercell, &
-                     fix_atom, debug)
+                     fix_atom, positions_diff, positions_prev, forces_prev, &
+                     debug)
     use mpi
     implicit none
 
@@ -565,6 +566,9 @@ subroutine migration_mask(mask, border, norm, n_pos)
     character*8, intent(inout), allocatable :: xyz_species_supercell(:)
     integer, intent(inout), allocatable :: species_supercell(:)
     logical, intent(inout), allocatable :: fix_atom(:,:)
+    real*8, intent(inout), allocatable :: positions_diff(:,:)
+    real*8, intent(inout), allocatable :: positions_prev(:,:)
+    real*8, intent(inout), allocatable :: forces_prev(:,:)
     logical, intent(in) :: debug
 
     real*8 :: norm(3, n_sites)
@@ -580,9 +584,11 @@ subroutine migration_mask(mask, border, norm, n_pos)
     integer :: targets(n_sites)
     integer, allocatable :: sort_order(:)
     integer, allocatable :: buffer_ids(:)
-    real*8, allocatable :: buffer_positions(:,:)
+    real*8, allocatable :: buffer_positions(:,:), buffer_positions_diff(:,:), &
+                           buffer_positions_prev(:,:)
     real*8, allocatable :: buffer_velocities(:,:)
     real*8, allocatable :: buffer_masses(:)
+    real*8, allocatable :: buffer_forces_prev(:,:)
     integer, allocatable :: buffer_species(:)
     integer, allocatable :: buffer_species_supercell(:)
     logical, allocatable :: buffer_fix_atom(:,:)
@@ -622,6 +628,9 @@ subroutine migration_mask(mask, border, norm, n_pos)
     xyz_species_supercell(1:n_sp_sc) = xyz_species_supercell(sort_order)
     species_supercell(1:n_sp_sc) = species_supercell(sort_order)
     fix_atom(1:3, 1:n_sp) = fix_atom(1:3, sort_order)
+    positions_diff(1:3, 1:n_sites) = positions_diff(1:3, sort_order)
+    positions_prev(1:3, 1:n_sites) = positions_prev(1:3, sort_order)
+    forces_prev(1:3, 1:n_sites) = forces_prev(1:3, sort_order)
     ! resize receive arrays if needed
     n_send = sum(send_count)
     n_recv = sum(recv_count)
@@ -664,6 +673,18 @@ subroutine migration_mask(mask, border, norm, n_pos)
        buffer_fix_atom(1:3,1:n_sp) = fix_atom(1:3,1:n_sp)
        deallocate(fix_atom)
        call move_alloc(buffer_fix_atom, fix_atom)
+       allocate(buffer_positions_diff(3, n_alloc))
+       buffer_positions_diff(1:3, 1:n_pos) = positions_diff(1:3, 1:n_pos)
+       deallocate(positions_diff)
+       call move_alloc(buffer_positions_diff, positions_diff)
+       allocate(buffer_positions_prev(3, n_alloc))
+       buffer_positions_prev(1:3, 1:n_pos) = positions_prev(1:3, 1:n_pos)
+       deallocate(positions_prev)
+       call move_alloc(buffer_positions_prev, positions_prev)
+       allocate(buffer_forces_prev(3, n_alloc))
+       buffer_forces_prev(1:3, 1:n_pos) = forces_prev(1:3, 1:n_pos)
+       deallocate(forces_prev)
+       call move_alloc(buffer_forces_prev, forces_prev)
     else
        n_alloc = 0
     end if
@@ -677,22 +698,28 @@ subroutine migration_mask(mask, border, norm, n_pos)
     allocate(buffer_xyz_species_supercell(n_send))
     allocate(buffer_species_supercell(n_send))
     allocate(buffer_fix_atom(3, n_send))
+    allocate(buffer_positions_diff(3, n_send))
+    allocate(buffer_positions_prev(3, n_send))
+    allocate(buffer_forces_prev(3, n_send))
     ! copy to-be-migrated sites to send buffers
     s = 1 + n_sites - n_send
     buffer_ids(1:n_send) = ids(s:n_sites)
-    buffer_positions(1:3, 1:n_send) = positions(1:3, s:n_pos)
-    buffer_velocities(1:3, 1:n_send) = velocities(1:3, s:n_pos)
-    buffer_masses(1:n_send) = masses(s:n_sp)
-    buffer_xyz_species(1:n_send) = xyz_species(s:n_sp)
-    buffer_species(1:n_send) = species(s:n_sp)
-    buffer_xyz_species_supercell(1:n_send) = xyz_species_supercell(s:n_sp_sc)
-    buffer_species_supercell(1:n_send) = species_supercell(s:n_sp_sc)
-    buffer_fix_atom(1:3, 1:n_send) = fix_atom(1:3, s:n_sp)
+    buffer_positions(1:3, 1:n_send) = positions(1:3, s:n_sites)
+    buffer_velocities(1:3, 1:n_send) = velocities(1:3, s:n_sites)
+    buffer_masses(1:n_send) = masses(s:n_sites)
+    buffer_xyz_species(1:n_send) = xyz_species(s:n_sites)
+    buffer_species(1:n_send) = species(s:n_sites)
+    buffer_xyz_species_supercell(1:n_send) = xyz_species_supercell(s:n_sites)
+    buffer_species_supercell(1:n_send) = species_supercell(s:n_sites)
+    buffer_fix_atom(1:3, 1:n_send) = fix_atom(1:3, s:n_sites)
+    buffer_positions_diff(1:3, 1:n_send) = positions_diff(1:3, s:n_sites)
+    buffer_positions_prev(1:3, 1:n_send) = positions_prev(1:3, s:n_sites)
+    buffer_forces_prev(1:3, 1:n_send) = forces_prev(1:3, s:n_sites)
     ! migrate sites
     s = 1
     r = 1 + n_sites - n_send
     do n = 1, 26
-       a = 9                ! no. of arrays to communicate
+       a = 12               ! no. of arrays to communicate
        o = (n - 1) * 2 * a  ! request offset
        call mpi_irecv(ids(r:), recv_count(n), &
                       MPI_INTEGER, neighbors(n), 1, &
@@ -721,6 +748,15 @@ subroutine migration_mask(mask, border, norm, n_pos)
        call mpi_irecv(fix_atom(1:3,r:), 3 * recv_count(n), &
                       MPI_LOGICAL, neighbors(n), 9, &
                       grid_comm, request(o+9), ierr)
+       call mpi_irecv(positions_diff(1:3,r:), 3 * recv_count(n), &
+                      MPI_DOUBLE_PRECISION, neighbors(n), 2, &
+                      grid_comm, request(o+10), ierr)
+       call mpi_irecv(positions_prev(1:3,r:), 3 * recv_count(n), &
+                      MPI_DOUBLE_PRECISION, neighbors(n), 2, &
+                      grid_comm, request(o+11), ierr)
+       call mpi_irecv(forces_prev(1:3,r:), 3 * recv_count(n), &
+                      MPI_DOUBLE_PRECISION, neighbors(n), 2, &
+                      grid_comm, request(o+12), ierr)
        o = o + a
        call mpi_isend(buffer_ids(s:), send_count(n), &
                       MPI_INTEGER, neighbors(n), 1, &
@@ -749,6 +785,15 @@ subroutine migration_mask(mask, border, norm, n_pos)
        call mpi_isend(buffer_fix_atom(1:3,s:), 3 * send_count(n), &
                       MPI_LOGICAL, neighbors(n), 9, &
                       grid_comm, request(o+9), ierr)
+       call mpi_isend(buffer_positions_diff(1:3,s:), 3 * send_count(n), &
+                      MPI_DOUBLE_PRECISION, neighbors(n), 2, &
+                      grid_comm, request(o+10), ierr)
+       call mpi_isend(buffer_positions_prev(1:3,s:), 3 * send_count(n), &
+                      MPI_DOUBLE_PRECISION, neighbors(n), 2, &
+                      grid_comm, request(o+11), ierr)
+       call mpi_isend(buffer_forces_prev(1:3,s:), 3 * send_count(n), &
+                      MPI_DOUBLE_PRECISION, neighbors(n), 2, &
+                      grid_comm, request(o+12), ierr)
        s = s + send_count(n)
        r = r + recv_count(n)
     end do
@@ -767,6 +812,9 @@ subroutine migration_mask(mask, border, norm, n_pos)
     deallocate(buffer_xyz_species_supercell)
     deallocate(buffer_species_supercell)
     deallocate(buffer_fix_atom)
+    deallocate(buffer_positions_diff)
+    deallocate(buffer_positions_prev)
+    deallocate(buffer_forces_prev)
   end subroutine
 !**************************************************************************
 

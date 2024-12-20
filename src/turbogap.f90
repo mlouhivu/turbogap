@@ -1076,7 +1076,7 @@ program turbogap
         n_pos = n_sites
         n_sp = n_sites
         n_sp_sc = n_sites
-        ! ghost sites for halo exchange
+        ! initial guess for the number of ghost sites for halo exchange
         ! FIXME: should be lower, i.e. based on cutoff / domain size
         n_sites_ghost = n_sites_global / ntasks * (grid_dims * 2 + 0.1)
         if ((n_sites_ghost + n_sites) > n_sites_global) then
@@ -1101,6 +1101,12 @@ program turbogap
         allocate(fix_atom(1:3,1:n_sp + n_sites_ghost))
         if (allocated(ids)) deallocate(ids)
         allocate(ids(1:n_sites + n_sites_ghost))
+        if (allocated(positions_diff)) deallocate(positions_diff)
+        allocate(positions_diff(1:3, n_pos + n_sites_ghost))
+        if (allocated(positions_prev)) deallocate(positions_prev)
+        allocate(positions_prev(1:3, n_pos + n_sites_ghost))
+        if (allocated(forces_prev)) deallocate(forces_prev)
+        allocate(forces_prev(1:3, n_pos + n_sites_ghost))
      else if (params%do_dd .and. md_istep /= 0) then
         ! migrate out-of-cell sites between domains
         if (local_rank == 0) then
@@ -1109,7 +1115,8 @@ program turbogap
                         global_rank, local_rank, n_sites_local, n_pos, n_sp, &
                         n_sp_sc, ids, positions, velocities, masses, &
                         xyz_species, species, xyz_species_supercell, &
-                        species_supercell, fix_atom, params%dd_debug)
+                        species_supercell, fix_atom, positions_diff, &
+                        positions_prev, forces_prev, params%dd_debug)
         end if
         call mpi_bcast(n_sites_local, 1, MPI_INTEGER, 0, local_comm, ierr)
      else
