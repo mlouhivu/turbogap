@@ -2139,13 +2139,13 @@ program turbogap
                  global_virial = global_virial_soap + global_virial_2b &
                                + global_virial_3b + global_virial_core_pot &
                                + global_virial_vdw
-                 ! broadcast the global forces and virials (at rank 0) to everyone
-                 ! FIXME: are global forces needed? if not, remove
-                 call mpi_bcast(global_forces, 3 * n_sites_global, MPI_DOUBLE_PRECISION, &
-                                0, MPI_COMM_WORLD, ierr)
-                 call mpi_bcast(global_virial, 9, MPI_DOUBLE_PRECISION, &
-                                0, MPI_COMM_WORLD, ierr)
               end if
+              ! broadcast the global forces and virials (at rank 0) to everyone
+              ! FIXME: are global forces needed? if not, remove
+              call mpi_bcast(global_forces, 3 * n_sites_global, MPI_DOUBLE_PRECISION, &
+                             0, MPI_COMM_WORLD, ierr)
+              call mpi_bcast(global_virial, 9, MPI_DOUBLE_PRECISION, &
+                             0, MPI_COMM_WORLD, ierr)
            end if
 
            if ( params%print_vdw_forces )then
