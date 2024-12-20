@@ -965,6 +965,13 @@ subroutine migration_mask(mask, border, norm, n_pos)
           src = neighbors(n+1)
           tgt = neighbors(n)
        end if
+       ! skip communication with self
+       if (src == global_rank) then
+          src = MPI_PROC_NULL
+       end if
+       if (tgt == global_rank) then
+          tgt = MPI_PROC_NULL
+       end if
        ! how many ghost sites to send / receive?
        n_send = count(mask(n,:))
        call mpi_sendrecv(n_send, 1, MPI_INTEGER, tgt, 0, &
