@@ -1186,6 +1186,21 @@ program turbogap
                  end if
               end if
            end if
+           if (rank == 0) then
+              ! reorder global arrays back to original order
+              do i = 1, n_sites_global
+                 sort_order(global_ids(i)) = i
+              end do
+              global_positions = global_positions(:,sort_order)
+              global_velocities = global_velocities(:,sort_order)
+              global_masses = global_masses(sort_order)
+              global_xyz_species = global_xyz_species(sort_order)
+              global_species = global_species(sort_order)
+              global_xyz_species_supercell = global_xyz_species_supercell(sort_order)
+              global_species_supercell = global_species_supercell(sort_order)
+              global_fix_atom = global_fix_atom(:,sort_order)
+              global_ids = global_ids(sort_order)
+           endif
            ! global
            call cpu_time(time_mpi_positions(1))
            call mpi_bcast(indices, 3, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
