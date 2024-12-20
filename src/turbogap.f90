@@ -1540,7 +1540,8 @@ program turbogap
                     this_hirshfeld_v_cart_der_pt => this_hirshfeld_v_cart_der(1:3, this_j_beg:this_j_end)
                  end if
               end if
-              call get_gap_soap(n_sites, this_n_sites_mpi, n_neigh(this_i_beg:this_i_end), neighbors_list(this_j_beg:this_j_end), &
+              call get_gap_soap(n_sites_local, this_n_sites_mpi, n_neigh(this_i_beg:this_i_end), &
+                   neighbors_list(this_j_beg:this_j_end), &
                    soap_turbo_hypers(i)%n_species, soap_turbo_hypers(i)%species_types, &
                    rjs(this_j_beg:this_j_end), thetas(this_j_beg:this_j_end), phis(this_j_beg:this_j_end), &
                    xyz(1:3, this_j_beg:this_j_end), &
@@ -2011,7 +2012,7 @@ program turbogap
               call mpi_gather(n_sites_local, 1, MPI_INTEGER, &
                               distribute_counts, 1, MPI_INTEGER, &
                               0, global_comm, ierr)
-              distribute_displs(i) = 0
+              distribute_displs(1) = 0
               do i = 2, global_ntasks
                  distribute_displs(i) = distribute_displs(i-1) + distribute_counts(i-1)
               end do
@@ -2257,7 +2258,7 @@ program turbogap
               time_step = params%md_step
            end if
            !     We wrap the positions and remoce CM velocity
-           call wrap_pbc(positions(1:3,1:n_sites), a_box&
+           call wrap_pbc(positions(1:3,1:n_sites_local), a_box&
                 &/dfloat(indices(1)), b_box/dfloat(indices(2)), c_box&
                 &/dfloat(indices(3)))
            if (params%do_dd) then
@@ -2276,7 +2277,8 @@ program turbogap
 
            !     First we check if this is a variable time step simulation
            if( params%variable_time_step )then
-              call variable_time_step(md_istep == 0, velocities(1:3, 1:n_sites), forces(1:3, 1:n_sites), masses(1:n_sites), &
+              call variable_time_step(md_istep == 0, velocities(1:3, 1:n_sites_local), &
+                   forces(1:3, 1:n_sites_local), masses(1:n_sites_local), &
                    params%target_pos_step, params%tau_dt, params%md_step, time_step)
            end if
 
@@ -2285,8 +2287,8 @@ program turbogap
 
 	  if ( params%electronic_stopping ) then
 		call electron_stopping_velocity_dependent (md_istep, n_species, params%eel_cut, params%eel_freq_out, &
-					velocities(1:3, 1:n_sites), forces(1:3, 1:n_sites), masses(1:n_sites), &
-					params%masses_types, time_step, md_time, nrows, allelstopdata, cum_EEL, 'forces')		
+					velocities(1:3, 1:n_sites_local), forces(1:3, 1:n_sites_local), masses(1:n_sites_local), &
+					params%masses_types, time_step, md_time, nrows, allelstopdata, cum_EEL, 'forces')
 	  end if
 
 	   !! -----------------------------------	******** until here for electronic stopping
@@ -2295,9 +2297,9 @@ program turbogap
 	   !! ------- option for electronic stopping based on eph model
 
 	  if ( params%nonadiabatic_processes ) then
-		call ephlsc%eph_LangevinForces (velocities(1:3, 1:n_sites), forces(1:3, 1:n_sites), &
-					masses(1:n_sites), params%masses_types, md_istep, time_step, md_time, &
-					positions(1:3, 1:n_sites), n_species, ephbeta, ephfdm)	
+		call ephlsc%eph_LangevinForces (velocities(1:3, 1:n_sites_local), forces(1:3, 1:n_sites_local), &
+					masses(1:n_sites_local), params%masses_types, md_istep, time_step, md_time, &
+					positions(1:3, 1:n_sites_local), n_species, ephbeta, ephfdm)
 	  end if
 
 	  !! -----------------------------------	******** until here for electronic stopping basd on eph model
@@ -2307,14 +2309,14 @@ program turbogap
 
 	  if ( params%adaptive_time ) then
 		if (MOD(md_istep, params%adapt_tstep_interval) == 0) then
-			call variable_time_step_adaptive (md_istep == 0, velocities(1:3, 1:n_sites), forces(1:3, 1:n_sites), &
-						masses(1:n_sites), params%adapt_tmin, params%adapt_tmax, params%adapt_xmax, &
+			call variable_time_step_adaptive (md_istep == 0, velocities(1:3, 1:n_sites_local), forces(1:3, 1:n_sites_local), &
+						masses(1:n_sites_local), params%adapt_tmin, params%adapt_tmax, params%adapt_xmax, &
 						params%adapt_emax, params%md_step, time_step)
 		end if
 	  end if
 
 	  !! ----------------------------------	******** until here for adaptive time
-           
+
            if (params%do_dd) then
               ! reallocate arrays if needed
               if (size(positions_prev, 2) < n_sites) then
@@ -2330,27 +2332,29 @@ program turbogap
            !     dt later. forces are taken at t, and forces_prev at t-dt. forces is left unchanged by the routine, and
            !     forces_prev is returned as equal to forces (both arrays contain the same information on return)
            if( params%optimize == "vv")then
-              call velocity_verlet(positions(1:3, 1:n_sites), positions_prev(1:3, 1:n_sites), velocities(1:3, 1:n_sites), &
-                   forces(1:3, 1:n_sites), forces_prev(1:3, 1:n_sites), masses(1:n_sites), time_step, time_step_prev, &
+              call velocity_verlet(positions(1:3, 1:n_sites_local), positions_prev(1:3, 1:n_sites_local), &
+                   velocities(1:3, 1:n_sites_local), forces(1:3, 1:n_sites_local), forces_prev(1:3, 1:n_sites_local), &
+                   masses(1:n_sites_local), time_step, time_step_prev, &
                    md_istep == 0, a_box/dfloat(indices(1)), b_box/dfloat(indices(2)), c_box/dfloat(indices(3)), &
-                   fix_atom(1:3, 1:n_sites))
+                   fix_atom(1:3, 1:n_sites_local))
            else if( params%optimize == "gd" )then
-              call gradient_descent(positions(1:3, 1:n_sites), positions_prev(1:3, 1:n_sites), velocities(1:3, 1:n_sites), &
-                   forces(1:3, 1:n_sites), forces_prev(1:3, 1:n_sites), masses(1:n_sites), &
+              call gradient_descent(positions(1:3, 1:n_sites_local), positions_prev(1:3, 1:n_sites_local), &
+                   velocities(1:3, 1:n_sites_local), forces(1:3, 1:n_sites_local), forces_prev(1:3, 1:n_sites_local), &
+                   masses(1:n_sites_local), &
                    params%max_opt_step, md_istep == 0, a_box/dfloat(indices(1)), b_box/dfloat(indices(2)), &
-                   c_box/dfloat(indices(3)), fix_atom(1:3, 1:n_sites), energy)
+                   c_box/dfloat(indices(3)), fix_atom(1:3, 1:n_sites_local), energy)
            else if( (params%optimize == "gd-box" .or. params%optimize == "gd-box-ortho") .and. gd_box_do_pos)then
               !       We propagate the positions
-              call gradient_descent(positions(1:3, 1:n_sites),&
-                   & positions_prev(1:3, 1:n_sites), velocities(1:3,&
-                   & 1:n_sites), forces(1:3, 1:n_sites),&
-                   & forces_prev(1:3, 1:n_sites), masses(1:n_sites),&
+              call gradient_descent(positions(1:3, 1:n_sites_local),&
+                   & positions_prev(1:3, 1:n_sites_local), velocities(1:3,&
+                   & 1:n_sites_local), forces(1:3, 1:n_sites_local),&
+                   & forces_prev(1:3, 1:n_sites_local), masses(1:n_sites_local),&
                    & params%max_opt_step, gd_istep == 0, a_box&
                    &/dfloat(indices(1)), b_box/dfloat(indices(2)),&
                    & c_box/dfloat(indices(3)), fix_atom(1:3,&
-                   & 1:n_sites), energy)
+                   & 1:n_sites_local), energy)
               if( gd_istep > 1 .and. abs(energy-energy_prev) < params&
-                   &%e_tol*dfloat(n_sites) .and. maxval(forces) <&
+                   &%e_tol*dfloat(n_sites_local) .and. maxval(forces) <&
                    & params%f_tol )then
                  !         If the position optimization is converged
                  !         (energy only) we set the code to do the
@@ -2362,15 +2366,15 @@ program turbogap
               end if
            else
               !       If nothing happens we still update these variables
-              positions_prev(1:3, 1:n_sites) = positions(1:3, 1:n_sites)
-              forces_prev(1:3, 1:n_sites) = forces(1:3, 1:n_sites)
+              positions_prev(1:3, 1:n_sites_local) = positions(1:3, 1:n_sites_local)
+              forces_prev(1:3, 1:n_sites_local) = forces(1:3, 1:n_sites_local)
            end if
            
 	!! ------- option for radiation cascade simulation with electronic stopping
 
 	  if ( params%electronic_stopping ) then
 		call electron_stopping_velocity_dependent (md_istep, n_species, params%eel_cut, params%eel_freq_out, &
-					velocities(1:3, 1:n_sites), forces(1:3, 1:n_sites), masses(1:n_sites), &
+					velocities(1:3, 1:n_sites_local), forces(1:3, 1:n_sites_local), masses(1:n_sites_local), &
 					params%masses_types, time_step, md_time, nrows, allelstopdata, cum_EEL, 'energy')
 	  end if
 
@@ -2380,8 +2384,8 @@ program turbogap
 	!! ------- option for electronic stopping based on eph model
 
 	  if ( params%nonadiabatic_processes ) then
-		call ephlsc%eph_LangevinEnergyDissipation (md_istep, md_time, velocities(1:3, 1:n_sites), &
-				positions(1:3, 1:n_sites), time_step, ephfdm)	
+		call ephlsc%eph_LangevinEnergyDissipation (md_istep, md_time, velocities(1:3, 1:n_sites_local), &
+				positions(1:3, 1:n_sites_local), time_step, ephfdm)
 	  end if
 
 	!! -----------------------------------		******** until here for electronic stopping basd on eph model
@@ -2466,7 +2470,7 @@ program turbogap
            !     Check if we have converged a relaxation calculation
            !     Check if we have converged a relaxation calculation
            if( params%do_md .and. params%optimize == "gd" .and. md_istep > 0 .and. &
-                abs(energy-energy_prev) < params%e_tol*dfloat(n_sites) .and. &
+                abs(energy-energy_prev) < params%e_tol*dfloat(n_sites_global) .and. &
                 maxval(forces) < params%f_tol .and. rank == 0 )then
               exit_loop = .true.
               if (params%do_mc) exit_loop=.false.
@@ -2476,7 +2480,7 @@ program turbogap
            else if( params%do_md .and. (params%optimize == "gd-box"&
                 & .or. params%optimize == "gd-box-ortho") .and.&
                 & gd_istep > 1 .and. abs(energy-energy_prev) < params&
-                &%e_tol*dfloat(n_sites) .and. abs(instant_pressure -&
+                &%e_tol*dfloat(n_sites_global) .and. abs(instant_pressure -&
                 & instant_pressure_prev) < params%p_tol .and.&
                 & maxval(abs(forces)) < params%f_tol .and. rank == 0&
                 & )then
@@ -2601,15 +2605,15 @@ program turbogap
                  gd_istep = 0
               else
                  !         We rewind positions and forces because they were already updated above
-                 positions(1:3, 1:n_sites) = positions_prev(1:3, 1:n_sites)
-                 forces(1:3, 1:n_sites) = forces_prev(1:3, 1:n_sites)
+                 positions(1:3, 1:n_sites_local) = positions_prev(1:3, 1:n_sites_local)
+                 forces(1:3, 1:n_sites_local) = forces_prev(1:3, 1:n_sites_local)
                  !
                  a_box = a_box/dfloat(indices(1))
                  b_box = b_box/dfloat(indices(2))
                  c_box = c_box/dfloat(indices(3))
-                 call gradient_descent_box(positions(1:3, 1:n_sites), positions_prev(1:3, 1:n_sites), &
-                      velocities(1:3, 1:n_sites), &
-                      forces(1:3, 1:n_sites), forces_prev(1:3, 1:n_sites), masses(1:n_sites), &
+                 call gradient_descent_box(positions(1:3, 1:n_sites_local), positions_prev(1:3, 1:n_sites_local), &
+                      velocities(1:3, 1:n_sites_local), &
+                      forces(1:3, 1:n_sites_local), forces_prev(1:3, 1:n_sites_local), masses(1:n_sites_local), &
                       params%max_opt_step_eps, gd_istep == 0, a_box, b_box, c_box, energy, &
                       [virial(1,1), virial(2,2), virial(3,3), virial(2,3), virial(1,3), virial(1,2)], &
                       params%optimize, restart_box_optim )
@@ -2621,12 +2625,12 @@ program turbogap
            end if
            !     If there are thermostating operations they happen here
            if( params%thermostat == "berendsen" )then
-              call berendsen_thermostat(velocities(1:3, 1:n_sites), &
+              call berendsen_thermostat(velocities(1:3, 1:n_sites_local), &
                    params%t_beg + (params%t_end-params%t_beg)*dfloat(md_istep+1)/float(params%md_nsteps), &
                    instant_temp, params%tau_t, time_step)
            else if( params%thermostat == "bussi" )then
               if (params%do_dd) then
-                 velocities(1:3, 1:n_sites) = velocities(1:3, 1:n_sites) * dsqrt(resamplekin(E_kinetic, &
+                 velocities(1:3, 1:n_sites_local) = velocities(1:3, 1:n_sites_local) * dsqrt(resamplekin(E_kinetic, &
                       params%t_beg + (params%t_end-params%t_beg)*dfloat(md_istep+1)/float(params%md_nsteps), &
                       3*n_sites_global-3,params%tau_t, time_step) / E_kinetic)
               else
@@ -3373,7 +3377,7 @@ program turbogap
      if( .not. params%do_md .or. (params%do_md .and. md_istep == 0) .or. &
           ( params%do_mc ) )then
         if( allocated(do_list))deallocate(do_list)
-        allocate( do_list(1:n_sites) )
+        allocate( do_list(1:n_sites_local) )
         do_list = .true.
      end if
      !
