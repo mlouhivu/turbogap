@@ -1965,22 +1965,34 @@ program turbogap
               deallocate( all_forces, all_this_forces, all_virial, all_this_virial )
            end if
 
+           if (params%do_dd .and. md_istep == 0) then
+              allocate(global_energies(1:n_sites_global))
+              allocate(global_energies_soap(1:n_sites_global))
+              allocate(global_energies_vdw(1:n_sites_global))
+              allocate(global_energies_2b(1:n_sites_global))
+              allocate(global_energies_core_pot(1:n_sites_global))
+              allocate(global_energies_3b(1:n_sites_global))
+              allocate(global_forces(1:3, 1:n_sites_global))
+              allocate(global_forces_soap(1:3, 1:n_sites_global))
+              allocate(global_forces_vdw(1:3, 1:n_sites_global))
+              allocate(global_forces_2b(1:3, 1:n_sites_global))
+              allocate(global_forces_core_pot(1:3, 1:n_sites_global))
+              allocate(global_forces_3b(1:3, 1:n_sites_global))
+              global_energies = 0.d0
+              global_energies_soap = 0.d0
+              global_energies_vdw = 0.d0
+              global_energies_2b = 0.d0
+              global_energies_core_pot = 0.d0
+              global_energies_3b = 0.d0
+              global_forces = 0.d0
+              global_forces_soap = 0.d0
+              global_forces_vdw = 0.d0
+              global_forces_2b = 0.d0
+              global_forces_core_pot = 0.d0
+              global_forces_3b = 0.d0
+           end if
            if (params%do_dd .and. local_rank == 0) then
               ! gather energies (+ forces and virials) from all domains
-              if (md_istep == 0) then
-                 allocate(global_energies(1:n_sites_global))
-                 allocate(global_energies_soap(1:n_sites_global))
-                 allocate(global_energies_vdw(1:n_sites_global))
-                 allocate(global_energies_2b(1:n_sites_global))
-                 allocate(global_energies_core_pot(1:n_sites_global))
-                 allocate(global_energies_3b(1:n_sites_global))
-                 allocate(global_forces(1:3, 1:n_sites_global))
-                 allocate(global_forces_soap(1:3, 1:n_sites_global))
-                 allocate(global_forces_vdw(1:3, 1:n_sites_global))
-                 allocate(global_forces_2b(1:3, 1:n_sites_global))
-                 allocate(global_forces_core_pot(1:3, 1:n_sites_global))
-                 allocate(global_forces_3b(1:3, 1:n_sites_global))
-              end if
               call mpi_gather(n_sites_local, 1, MPI_INTEGER, &
                               distribute_counts, 1, MPI_INTEGER, &
                               0, global_comm, ierr)
