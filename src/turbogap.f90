@@ -2615,7 +2615,8 @@ program turbogap
                       velocities(1:3, 1:n_sites_local), &
                       forces(1:3, 1:n_sites_local), forces_prev(1:3, 1:n_sites_local), masses(1:n_sites_local), &
                       params%max_opt_step_eps, gd_istep == 0, a_box, b_box, c_box, energy, &
-                      [virial(1,1), virial(2,2), virial(3,3), virial(2,3), virial(1,3), virial(1,2)], &
+                      [global_virial(1,1), global_virial(2,2), global_virial(3,3), &
+                       global_virial(2,3), global_virial(1,3), global_virial(1,2)], &
                       params%optimize, restart_box_optim )
                  a_box = a_box*dfloat(indices(1))
                  b_box = b_box*dfloat(indices(2))
