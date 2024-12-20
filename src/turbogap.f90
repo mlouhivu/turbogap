@@ -2062,14 +2062,24 @@ program turbogap
 
 
            !       Add up all the energy terms
-           energies = energies + energies_soap + energies_2b + energies_3b + energies_core_pot + energies_vdw
+           if (local_rank == 0) then
+              energies(1:n_sites) = energies(1:n_sites) &
+                                  + energies_soap(1:n_sites) &
+                                  + energies_2b(1:n_sites) &
+                                  + energies_3b(1:n_sites) &
+                                  + energies_core_pot(1:n_sites) &
+                                  + energies_vdw(1:n_sites)
+           end if
            energy_prev = energy
            instant_pressure_prev = instant_pressure
            if (params%do_dd) then
               if (rank == 0) then
-                 global_energies = global_energies + global_energies_soap &
-                                 + global_energies_2b + global_energies_3b &
-                                 + global_energies_core_pot + global_energies_vdw
+                 global_energies(:) = global_energies(:) &
+                                    + global_energies_soap(:) &
+                                    + global_energies_2b(:) &
+                                    + global_energies_3b(:) &
+                                    + global_energies_core_pot(:) &
+                                    + global_energies_vdw(:)
                  energy = sum(global_energies)
               end if
               ! broadcast the global energy (at rank 0) to everyone
