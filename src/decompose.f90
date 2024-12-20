@@ -573,7 +573,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
 
     real*8 :: norm(3, n_sites)
     integer :: n, s, r, a, o, ierr
-    integer :: n_recv, n_send
+    integer :: n_recv, n_send, n_request
     real*8 :: local_border(6)
     logical :: mask(0:26, n_sites)
     integer :: send_count(26)
@@ -608,13 +608,17 @@ subroutine migration_mask(mask, border, norm, n_pos)
                            global_rank)
 
     ! how many sites to migrate?
+    n_request = 0
+    recv_count(:) = 0
     do n = 1, 26
+       if (neighbors(n) == global_rank) cycle ! skip self
        call mpi_irecv(recv_count(n), 1, MPI_INTEGER, neighbors(n), 0, &
-                      grid_comm, request(n), ierr)
+                      grid_comm, request(n_request+1), ierr)
        call mpi_isend(send_count(n), 1, MPI_INTEGER, neighbors(n), 0, &
-                      grid_comm, request(n+26), ierr)
+                      grid_comm, request(n_request+2), ierr)
+       n_request = n_request + 2
     end do
-    call mpi_waitall(n * 2, request(1:n*2), status, ierr)
+    call mpi_waitall(n_request, request(1:n_request), status, ierr)
     ! sort arrays to move to-be-migrated sites to the end
     allocate(sort_order(n_sites))
     call get_sort_order(sort_order, targets, n_sites, 27)
@@ -716,11 +720,13 @@ subroutine migration_mask(mask, border, norm, n_pos)
     buffer_positions_prev(1:3, 1:n_send) = positions_prev(1:3, s:n_sites)
     buffer_forces_prev(1:3, 1:n_send) = forces_prev(1:3, s:n_sites)
     ! migrate sites
+    n_request = 0
     s = 1
     r = 1 + n_sites - n_send
     do n = 1, 26
+       if (neighbors(n) == global_rank) cycle ! skip self
        a = 12               ! no. of arrays to communicate
-       o = (n - 1) * 2 * a  ! request offset
+       o = n_request        ! request offset
        call mpi_irecv(ids(r:), recv_count(n), &
                       MPI_INTEGER, neighbors(n), 1, &
                       grid_comm, request(o+1), ierr)
@@ -794,10 +800,11 @@ subroutine migration_mask(mask, border, norm, n_pos)
        call mpi_isend(buffer_forces_prev(1:3,s:), 3 * send_count(n), &
                       MPI_DOUBLE_PRECISION, neighbors(n), 2, &
                       grid_comm, request(o+12), ierr)
+       n_request = o + a
        s = s + send_count(n)
        r = r + recv_count(n)
     end do
-    call mpi_waitall(n * 2 * a, request, status, ierr)
+    call mpi_waitall(n_request, request(1:n_request), status, ierr)
     n_sites = n_sites - n_send + n_recv
     n_pos = n_pos - n_send + n_recv
     n_sp = n_sp - n_send + n_recv
