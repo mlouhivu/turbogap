@@ -296,7 +296,7 @@ module decompose
     real*8, intent(in) :: borders(:,:)
     integer, intent(in) :: n_sites
 
-    real*8 :: norm(n_sites,3)
+    real*8 :: norm(3,n_sites)
     integer :: i, j, n
 
     call vectorised_projection(norm, surface, positions, n_sites)
@@ -304,8 +304,8 @@ module decompose
     do n = 1, n_sites
       do i = 1, 3
         do j = 1, grid(i)
-          if (borders(i, j) < norm(n, i) &
-              & .and. norm(n, i) <= borders(i, j + 1)) then
+          if (borders(i, j) < norm(i, n) &
+              & .and. norm(i, n) <= borders(i, j + 1)) then
             cell(n, i) = j - 1
             exit
           end if
@@ -442,7 +442,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
     implicit none
     logical, intent(out) :: mask(0:26, n_pos)
     real*8, intent(in) :: border(6)
-    real*8, intent(in) :: norm(n_pos, 3)
+    real*8, intent(in) :: norm(3, n_pos)
     integer, intent(in) :: n_pos
 
     logical :: mask_i(n_pos)
@@ -451,12 +451,12 @@ subroutine migration_mask(mask, border, norm, n_pos)
     integer :: i, j, k
 
     ! true if outside borders
-    mask_b(1,-1, :) = norm(:,1) <= border(1)
-    mask_b(1, 1, :) = norm(:,1) > border(2)
-    mask_b(2,-1, :) = norm(:,2) <= border(3)
-    mask_b(2, 1, :) = norm(:,2) > border(4)
-    mask_b(3,-1, :) = norm(:,3) <= border(5)
-    mask_b(3, 1, :) = norm(:,3) > border(6)
+    mask_b(1,-1, :) = norm(1,:) <= border(1)
+    mask_b(1, 1, :) = norm(1,:) > border(2)
+    mask_b(2,-1, :) = norm(2,:) <= border(3)
+    mask_b(2, 1, :) = norm(2,:) > border(4)
+    mask_b(3,-1, :) = norm(3,:) <= border(5)
+    mask_b(3, 1, :) = norm(3,:) > border(6)
     ! true if inside borders
     mask_b(1, 0, :) = .not. (mask_b(1,-1,:) .or. mask_b(1,1,:))
     mask_b(2, 0, :) = .not. (mask_b(2,-1,:) .or. mask_b(2,1,:))
@@ -567,7 +567,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
     logical, intent(inout), allocatable :: fix_atom(:,:)
     logical, intent(in) :: debug
 
-    real*8 :: norm(n_sites, 3)
+    real*8 :: norm(3, n_sites)
     integer :: n, s, r, a, o, ierr
     integer :: n_recv, n_send
     real*8 :: local_border(6)
@@ -768,16 +768,16 @@ subroutine migration_mask(mask, border, norm, n_pos)
     implicit none
     logical, intent(out) :: mask(6, n)
     real*8, intent(in) :: border(6)
-    real*8, intent(in) :: norm(n, 3)
+    real*8, intent(in) :: norm(3, n)
     integer, intent(in) :: n
     real*8, intent(in) :: distance
 
-    mask(1,:) = norm(:,1) <= (border(1) + distance)
-    mask(2,:) = norm(:,1) > (border(2) - distance)
-    mask(3,:) = norm(:,2) <= (border(3) + distance)
-    mask(4,:) = norm(:,2) > (border(4) - distance)
-    mask(5,:) = norm(:,3) <= (border(5) + distance)
-    mask(6,:) = norm(:,3) > (border(6) - distance)
+    mask(1,:) = norm(1,:) <= (border(1) + distance)
+    mask(2,:) = norm(1,:) > (border(2) - distance)
+    mask(3,:) = norm(2,:) <= (border(3) + distance)
+    mask(4,:) = norm(2,:) > (border(4) - distance)
+    mask(5,:) = norm(3,:) <= (border(5) + distance)
+    mask(6,:) = norm(3,:) > (border(6) - distance)
   end subroutine
 !**************************************************************************
 
@@ -870,7 +870,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
 
     call domain_borders(local_border, borders, grid_coords, global_rank)
     n_alloc = size(ids)
-    allocate(norm(n_alloc, 3))
+    allocate(norm(3, n_alloc))
     call vectorised_projection(norm, surface, positions, n_sites)
     allocate(mask(6, n_alloc))
     call exchange_mask(mask, local_border, norm, n_sites, rcut_max)
@@ -980,8 +980,8 @@ subroutine migration_mask(mask, border, norm, n_pos)
           allocate(tmp_fix_atom(3, n_alloc))
           tmp_fix_atom(1:3,1:n_alloc_old) = fix_atom(1:3,1:n_alloc_old)
           call move_alloc(tmp_fix_atom, fix_atom)
-          allocate(tmp_norm(n_alloc, 3))
-          tmp_norm(1:n_alloc_old, 1:3) = norm(1:n_alloc_old, 1:3)
+          allocate(tmp_norm(3, n_alloc))
+          tmp_norm(1:3, 1:n_alloc_old) = norm(1:3, 1:n_alloc_old)
           call move_alloc(tmp_norm, norm)
           allocate(tmp_mask(6, n_alloc))
           tmp_mask(1:6, 1:n_alloc_old) = mask(1:6, 1:n_alloc_old)
@@ -1040,9 +1040,9 @@ subroutine migration_mask(mask, border, norm, n_pos)
        fix_atom(1:3, s:e) = rbuffer_fix_atom(1:3, 1:n_recv)
        n_sites = n_sites + n_recv
        ! calculate new norms and update masks
-       call vectorised_projection(norm(s:e, 1:3), surface, &
+       call vectorised_projection(norm(1:3, s:e), surface, &
                                   positions(1:3, s:e), n_recv)
-       call exchange_mask(mask(1:6, s:e), local_border, norm(s:e, 1:3), &
+       call exchange_mask(mask(1:6, s:e), local_border, norm(1:3, s:e), &
                           n_recv, rcut_max)
     end do
     ! deallocate buffers
@@ -1106,7 +1106,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
   subroutine vectorised_projection(norm, s, v, n_sites)
     implicit none
 
-    real*8, intent(out) :: norm(n_sites,3)
+    real*8, intent(out) :: norm(3,n_sites)
     real*8, intent(in) :: s(3,3)
     real*8, intent(in) :: v(3,n_sites)
     integer, intent(in) :: n_sites
@@ -1115,7 +1115,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
 
     do i = 1, n_sites
       do j = 1, 3
-        norm(i,j) = s(j,1) * v(1,i) + s(j,2) * v(2,i) + s(j,3) * v(3,i)
+        norm(j,i) = s(j,1) * v(1,i) + s(j,2) * v(2,i) + s(j,3) * v(3,i)
       end do
     end do
   end subroutine
