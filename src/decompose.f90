@@ -1049,7 +1049,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
        end if
        ! halo exchange
        s = 1 + n_sites
-       e = 1 + n_sites + n_recv
+       e = n_sites + n_recv
        call mpi_sendrecv(buffer_ids, n_send, &
                          MPI_INTEGER, tgt, 0, &
                          ids(s:e), n_recv, &
