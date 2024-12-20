@@ -909,7 +909,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
     integer :: i, j, n, s, e, ierr
     integer :: src, tgt
     integer :: n_send, n_recv
-    integer :: n_send_alloc=0
+    integer :: n_send_alloc=100
     real*8 :: local_border(6)
     integer :: status(MPI_STATUS_SIZE)
     integer, allocatable :: buffer_ids(:)
@@ -938,6 +938,20 @@ subroutine migration_mask(mask, border, norm, n_pos)
     allocate(mask(6, n_alloc))
     call exchange_mask(mask, local_border, norm, n_sites, rcut_max)
 
+    ! allocate buffers
+    allocate(buffer_ids(n_send_alloc))
+    allocate(buffer_positions(3, n_send_alloc))
+    allocate(buffer_velocities(3, n_send_alloc))
+    allocate(buffer_masses(n_send_alloc))
+    allocate(buffer_xyz_species(n_send_alloc))
+    allocate(buffer_species(n_send_alloc))
+    allocate(buffer_xyz_species_supercell(n_send_alloc))
+    allocate(buffer_species_supercell(n_send_alloc))
+    allocate(buffer_fix_atom(3, n_send_alloc))
+    if (debug) then
+       write(*,*) "send buffers allocated:", n_send_alloc
+    end if
+
     do n = 1, 6
        if (mod(n,2) == 0) then
           ! shift up
@@ -955,17 +969,15 @@ subroutine migration_mask(mask, border, norm, n_pos)
                          grid_comm, status, ierr)
        ! allocate buffers
        if (n_send_alloc < n_send) then
-          if (n_send_alloc > 0) then
-             deallocate(buffer_ids)
-             deallocate(buffer_positions)
-             deallocate(buffer_velocities)
-             deallocate(buffer_masses)
-             deallocate(buffer_xyz_species)
-             deallocate(buffer_species)
-             deallocate(buffer_xyz_species_supercell)
-             deallocate(buffer_species_supercell)
-             deallocate(buffer_fix_atom)
-          end if
+          deallocate(buffer_ids)
+          deallocate(buffer_positions)
+          deallocate(buffer_velocities)
+          deallocate(buffer_masses)
+          deallocate(buffer_xyz_species)
+          deallocate(buffer_species)
+          deallocate(buffer_xyz_species_supercell)
+          deallocate(buffer_species_supercell)
+          deallocate(buffer_fix_atom)
           n_send_alloc = n_send * 2
           allocate(buffer_ids(n_send_alloc))
           allocate(buffer_positions(3, n_send_alloc))
