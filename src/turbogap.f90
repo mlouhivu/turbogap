@@ -1136,27 +1136,29 @@ program turbogap
         n_sites_global = n_sites
         n_sites_local = n_sites
 
-        if(allocated(positions))deallocate(positions)
-        allocate( positions(1:3, n_pos) )
-        if( params%do_md .or. params%do_nested_sampling .or. params%do_mc )then
-           if(allocated(velocities))deallocate(velocities)
-           allocate( velocities(1:3, n_sp) )
-           !      allocate( masses(n_pos) )
-           if(allocated( masses ))deallocate( masses )
-           allocate( masses(1:n_sp) )
-           ! if(allocated( fix_atom ))deallocate( fix_atom )
-           ! allocate( fix_atom(1:3, 1:n_sp) )
+        if (rank /= 0) then
+           if(allocated(positions))deallocate(positions)
+           allocate( positions(1:3, n_pos) )
+           if( params%do_md .or. params%do_nested_sampling .or. params%do_mc )then
+              if(allocated(velocities))deallocate(velocities)
+              allocate( velocities(1:3, n_sp) )
+              !      allocate( masses(n_pos) )
+              if(allocated( masses ))deallocate( masses )
+              allocate( masses(1:n_sp) )
+              ! if(allocated( fix_atom ))deallocate( fix_atom )
+              ! allocate( fix_atom(1:3, 1:n_sp) )
+           end if
+           if(allocated( xyz_species ))deallocate( xyz_species )
+           allocate( xyz_species(1:n_sp) )
+           if(allocated( species ))deallocate( species )
+           allocate( species(1:n_sp) )
+           if(allocated( xyz_species_supercell ))deallocate( xyz_species_supercell )
+           allocate( xyz_species_supercell(1:n_sp_sc) )
+           if(allocated( species_supercell ))deallocate( species_supercell )
+           allocate( species_supercell(1:n_sp_sc) )
+           if(allocated( fix_atom ))deallocate( fix_atom )
+           allocate( fix_atom(1:3,1:n_sp) )
         end if
-        if(allocated( xyz_species ))deallocate( xyz_species )
-        allocate( xyz_species(1:n_sp) )
-        if(allocated( species ))deallocate( species )
-        allocate( species(1:n_sp) )
-        if(allocated( xyz_species_supercell ))deallocate( xyz_species_supercell )
-        allocate( xyz_species_supercell(1:n_sp_sc) )
-        if(allocated( species_supercell ))deallocate( species_supercell )
-        allocate( species_supercell(1:n_sp_sc) )
-        if(allocated( fix_atom ))deallocate( fix_atom )
-        allocate( fix_atom(1:3,1:n_sp) )
      end if
 
      if (params%do_dd) then
