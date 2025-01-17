@@ -639,6 +639,9 @@ subroutine migration_mask(mask, border, norm, n_pos)
     n_send = sum(send_count)
     n_recv = sum(recv_count)
     n_alloc = n_sites - n_send + n_recv
+    if (debug) then
+       write(*, "(a,x,i0,a,i0)") "migrate in/out:", n_recv, "/", n_send
+    end if
     if (size(ids) < n_alloc) then
        n_alloc = 2 * size(ids)
        allocate(buffer_ids(n_alloc))
