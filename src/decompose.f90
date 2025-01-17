@@ -974,6 +974,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
        end if
        ! how many ghost sites to send / receive?
        n_send = count(mask(n,:))
+       n_recv = 0
        call mpi_sendrecv(n_send, 1, MPI_INTEGER, tgt, 0, &
                          n_recv, 1, MPI_INTEGER, src, 0, &
                          grid_comm, status, ierr)
