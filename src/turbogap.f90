@@ -2163,6 +2163,7 @@ program turbogap
               call mpi_bcast(global_virial, 9, MPI_DOUBLE_PRECISION, &
                              0, MPI_COMM_WORLD, ierr)
            else
+              global_forces = forces
               global_virial = virial
            end if
 
