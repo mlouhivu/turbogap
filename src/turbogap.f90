@@ -2180,7 +2180,6 @@ program turbogap
 
         end if
 
-
         ! For debugging the virial implementation
         if( rank == 0 .and. .false. )then
            if (params%do_dd) then
@@ -2530,24 +2529,29 @@ program turbogap
               !     We write out the trajectory file. We write positions_prev which is the one for which we have computed
               !     the properties. positions_prev and velocities are synchronous
               if (params%do_dd) then
-                 call wrap_pbc(global_positions_prev(1:3,1:n_sites_global), &
-                               a_box / dfloat(indices(1)), &
-                               b_box / dfloat(indices(2)), &
-                               c_box/dfloat(indices(3)))
-                 call write_extxyz(n_sites_global, md_istep, time_step, &
-                                   md_time, instant_temp, instant_pressure, &
-                                   a_box / dfloat(indices(1)), &
-                                   b_box / dfloat(indices(2)), &
-                                   c_box / dfloat(indices(3)), &
-                                   global_virial, global_xyz_species, &
-                                   global_positions_prev(1:3, 1:n_sites_global), &
-                                   global_velocities, global_forces, &
-                                   global_energies(1:n_sites_global), &
-                                   global_masses, hirshfeld_v, &
-                                   params%write_property, &
-                                   params%write_array_property, &
-                                   global_fix_atom(1:3, 1:n_sites_global), &
-                                   "trajectory_out.xyz", md_istep == 0)
+                 if ((md_istep == 0 .and. .not. params%do_nested_sampling) &
+                     .or. (md_istep == params%md_nsteps .and. .not. params%do_nested_sampling) &
+                     .or. (modulo(md_istep, params%write_xyz) == 0  .and. .not. params%do_nested_sampling) &
+                     .or. exit_loop) then
+                    call wrap_pbc(global_positions_prev(1:3,1:n_sites_global), &
+                                  a_box / dfloat(indices(1)), &
+                                  b_box / dfloat(indices(2)), &
+                                  c_box/dfloat(indices(3)))
+                    call write_extxyz(n_sites_global, md_istep, time_step, &
+                                      md_time, instant_temp, instant_pressure, &
+                                      a_box / dfloat(indices(1)), &
+                                      b_box / dfloat(indices(2)), &
+                                      c_box / dfloat(indices(3)), &
+                                      global_virial, global_xyz_species, &
+                                      global_positions_prev(1:3, 1:n_sites_global), &
+                                      global_velocities, global_forces, &
+                                      global_energies(1:n_sites_global), &
+                                      global_masses, hirshfeld_v, &
+                                      params%write_property, &
+                                      params%write_array_property, &
+                                      global_fix_atom(1:3, 1:n_sites_global), &
+                                      "trajectory_out.xyz", md_istep == 0)
+                 end if
               else
                  if( (md_istep == 0 .and. .not. params%do_nested_sampling) .or. &
                       (md_istep == params%md_nsteps .and. .not. params%do_nested_sampling) &
