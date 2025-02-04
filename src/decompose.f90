@@ -871,7 +871,8 @@ subroutine migration_mask(mask, border, norm, n_pos)
 
 
 !**************************************************************************
-  subroutine halo_exchange(n_alloc, grid, grid_coords, surface, borders, neighbors, &
+  subroutine halo_exchange(n_alloc, n_halo_send, n_halo_recv, &
+                           grid, grid_coords, surface, borders, neighbors, &
                            grid_comm, local_comm, global_rank, local_rank, &
                            rcut_max, n_sites, n_pos, n_sp, n_sp_sc, &
                            ids, positions, velocities, masses, xyz_species, &
@@ -881,6 +882,8 @@ subroutine migration_mask(mask, border, norm, n_pos)
     implicit none
 
     integer, intent(out) :: n_alloc
+    integer, intent(out) :: n_halo_send(6)
+    integer, intent(out) :: n_halo_recv(6)
     integer, intent(in) :: grid(3)
     integer, intent(in) :: grid_coords(:,:)
     real*8, intent(in) :: surface(3,3)
@@ -976,11 +979,16 @@ subroutine migration_mask(mask, border, norm, n_pos)
           tgt = MPI_PROC_NULL
        end if
        ! how many ghost sites to send / receive?
-       n_send = count(mask(n,:))
+       n_send = 0
+       if (tgt /= MPI_PROC_NULL) then
+          n_send = count(mask(n,:))
+       end if
        n_recv = 0
        call mpi_sendrecv(n_send, 1, MPI_INTEGER, tgt, 0, &
                          n_recv, 1, MPI_INTEGER, src, 0, &
                          grid_comm, status, ierr)
+       n_halo_send(n) = n_send
+       n_halo_recv(n) = n_recv
        ! allocate buffers
        if (n_send_alloc < n_send) then
           deallocate(buffer_ids)
@@ -1138,6 +1146,103 @@ subroutine migration_mask(mask, border, norm, n_pos)
     deallocate(buffer_xyz_species_supercell)
     deallocate(buffer_species_supercell)
     deallocate(buffer_fix_atom)
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
+  subroutine halo_forces(n_halo_send, n_halo_recv, neighbors, &
+                         grid_comm, global_rank, n_sites, n_sites_local, &
+                         ids, forces, debug)
+    use mpi
+    implicit none
+
+    integer, intent(in) :: n_halo_send(6)
+    integer, intent(in) :: n_halo_recv(6)
+    integer, intent(in) :: neighbors(26)
+    integer, intent(in) :: grid_comm
+    integer, intent(in) :: global_rank
+    integer, intent(inout) :: n_sites
+    integer, intent(inout) :: n_sites_local
+    integer, intent(inout), allocatable :: ids(:)
+    real*8, intent(inout), allocatable :: forces(:,:)
+    logical, intent(in) :: debug
+
+    integer :: i, j, n, s, e, ierr
+    integer :: src, tgt
+    integer :: n_send, n_recv
+    integer :: n_buffer_alloc
+    logical :: found
+    integer :: status(MPI_STATUS_SIZE)
+    integer, allocatable :: buffer_ids(:)
+    real*8, allocatable :: buffer_forces(:,:)
+
+    ! allocate buffers
+    n_buffer_alloc = maxval(n_halo_send)
+    allocate(buffer_ids(n_buffer_alloc))
+    allocate(buffer_forces(3, n_buffer_alloc))
+    if (debug) then
+       write(*,*) "halo_forces buffers allocated:", n_buffer_alloc
+    end if
+
+    ! offset for sending
+    s = 1 + n_sites_local
+    do n = 1, 6
+       ! sending partial forces back, so should be the reverse of halo exchange
+       if (mod(n,2) /= 0) then
+          ! shift up
+          src = neighbors(n)
+          tgt = neighbors(n+1)
+       else
+          ! shift down
+          src = neighbors(n)
+          tgt = neighbors(n-1)
+       end if
+       ! skip communication with self
+       if (src == global_rank) then
+          src = MPI_PROC_NULL
+       end if
+       if (tgt == global_rank) then
+          tgt = MPI_PROC_NULL
+       end if
+       ! how many ghost sites were sent / received in halo exchange?
+       n_send = n_halo_recv(n)
+       n_recv = n_halo_send(n)
+       if (debug) then
+          write(*,*) "halo_forces: n_send=", n_send, "n_recv=", n_recv
+       end if
+       ! halo exchange
+       e = s + n_send - 1
+       call mpi_sendrecv(ids(s:e), n_send, &
+                         MPI_INTEGER, tgt, 0, &
+                         buffer_ids, n_recv, &
+                         MPI_INTEGER, src, 0, &
+                         grid_comm, status, ierr)
+       call mpi_sendrecv(forces(1:3, s:e), 3 * n_send, &
+                         MPI_DOUBLE_PRECISION, tgt, 0, &
+                         buffer_forces, 3 * n_recv, &
+                         MPI_DOUBLE_PRECISION, src, 0, &
+                         grid_comm, status, ierr)
+       s = s + n_send
+       ! update forces
+       do i = 1, n_recv
+          found = .false.
+          do j = 1, n_sites
+             if (buffer_ids(i) == ids(j)) then
+                forces(1:3, j) = forces(1:3, j) + buffer_forces(1:3, i)
+                found = .true.
+                exit
+             end if
+          end do
+          if (debug .and. .not. found) then
+             write(*,*) "Warning: Force", buffer_ids(i), "not updated"
+          end if
+       end do
+    end do
+    ! deallocate buffers
+    deallocate(buffer_ids)
+    deallocate(buffer_forces)
   end subroutine
 !**************************************************************************
 
