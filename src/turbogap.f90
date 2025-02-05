@@ -151,6 +151,7 @@ program turbogap
 
   ! Domain decomposition
   integer :: n_sites_global, n_sites_local, n_sites_ghost, n_alloc
+  integer :: n_halo_send(6), n_halo_recv(6)
   real*8 :: cell(3:3), cell_origo(3)
   integer, allocatable :: color(:), grid_coords(:,:), grid_root(:,:,:), &
                           placement(:), sort_order(:)
@@ -1233,7 +1234,8 @@ program turbogap
         ! halo exchange
         n_sites = n_sites_local
         if (local_rank == 0) then
-           call halo_exchange(n_alloc, params%dd_grid, grid_coords, &
+           call halo_exchange(n_alloc, n_halo_send, n_halo_recv, &
+                              params%dd_grid, grid_coords, &
                               grid_surface, grid_borders, grid_neighbor, &
                               grid_comm, local_comm, global_rank, local_rank, &
                               rcut_max, n_sites, n_pos, n_sp, n_sp_sc, ids, &
@@ -1981,6 +1983,33 @@ program turbogap
            deallocate( all_energies, all_this_energies )
            if( params%do_forces )then
               deallocate( all_forces, all_this_forces, all_virial, all_this_virial )
+           end if
+
+           ! send back partial forces of ghost sites
+           if (params%do_dd .and. params%do_forces) then
+              if (local_rank == 0) then
+                 ! FIXME: rewrite as a single call
+                 call halo_forces(n_halo_send, n_halo_recv, grid_neighbor, &
+                                  grid_comm, global_rank, n_sites, &
+                                  n_sites_local, ids, forces_soap, &
+                                  params%dd_debug)
+                 call halo_forces(n_halo_send, n_halo_recv, grid_neighbor, &
+                                  grid_comm, global_rank, n_sites, &
+                                  n_sites_local, ids, forces_vdw, &
+                                  params%dd_debug)
+                 call halo_forces(n_halo_send, n_halo_recv, grid_neighbor, &
+                                  grid_comm, global_rank, n_sites, &
+                                  n_sites_local, ids, forces_2b, &
+                                  params%dd_debug)
+                 call halo_forces(n_halo_send, n_halo_recv, grid_neighbor, &
+                                  grid_comm, global_rank, n_sites, &
+                                  n_sites_local, ids, forces_core_pot, &
+                                  params%dd_debug)
+                 call halo_forces(n_halo_send, n_halo_recv, grid_neighbor, &
+                                  grid_comm, global_rank, n_sites, &
+                                  n_sites_local, ids, forces_3b, &
+                                  params%dd_debug)
+              end if
            end if
 
            if (params%do_dd .and. md_istep == 0) then
