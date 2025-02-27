@@ -1985,33 +1985,6 @@ program turbogap
               deallocate( all_forces, all_this_forces, all_virial, all_this_virial )
            end if
 
-           ! send back partial forces of ghost sites
-           if (params%do_dd .and. params%do_forces) then
-              if (local_rank == 0) then
-                 ! FIXME: rewrite as a single call
-                 call halo_forces(n_halo_send, n_halo_recv, grid_neighbor, &
-                                  grid_comm, global_rank, n_sites, &
-                                  n_sites_local, ids, forces_soap, &
-                                  params%dd_debug)
-                 call halo_forces(n_halo_send, n_halo_recv, grid_neighbor, &
-                                  grid_comm, global_rank, n_sites, &
-                                  n_sites_local, ids, forces_vdw, &
-                                  params%dd_debug)
-                 call halo_forces(n_halo_send, n_halo_recv, grid_neighbor, &
-                                  grid_comm, global_rank, n_sites, &
-                                  n_sites_local, ids, forces_2b, &
-                                  params%dd_debug)
-                 call halo_forces(n_halo_send, n_halo_recv, grid_neighbor, &
-                                  grid_comm, global_rank, n_sites, &
-                                  n_sites_local, ids, forces_core_pot, &
-                                  params%dd_debug)
-                 call halo_forces(n_halo_send, n_halo_recv, grid_neighbor, &
-                                  grid_comm, global_rank, n_sites, &
-                                  n_sites_local, ids, forces_3b, &
-                                  params%dd_debug)
-              end if
-           end if
-
            if (params%do_dd .and. md_istep == 0) then
               allocate(global_energies(1:n_sites_global))
               allocate(global_energies_soap(1:n_sites_global))
