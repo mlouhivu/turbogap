@@ -1016,20 +1016,22 @@ subroutine migration_mask(mask, border, norm, n_pos)
        end if
        ! copy ghost sites to send buffers
        j = 1
-       do i = 1, n_sites
-          if (mask(n,i)) then
-             buffer_ids(j) = ids(i)
-             buffer_positions(1:3, j) = positions(1:3, i)
-             buffer_velocities(1:3, j) = velocities(1:3, i)
-             buffer_masses(j) = masses(i)
-             buffer_xyz_species(j) = xyz_species(i)
-             buffer_species(j) = species(i)
-             buffer_xyz_species_supercell(j) = xyz_species_supercell(i)
-             buffer_species_supercell(j) = species_supercell(i)
-             buffer_fix_atom(1:3, j) = fix_atom(1:3, i)
-             j = j + 1
-          end if
-       end do
+       if (n_send > 0) then
+          do i = 1, n_sites
+             if (mask(n,i)) then
+                buffer_ids(j) = ids(i)
+                buffer_positions(1:3, j) = positions(1:3, i)
+                buffer_velocities(1:3, j) = velocities(1:3, i)
+                buffer_masses(j) = masses(i)
+                buffer_xyz_species(j) = xyz_species(i)
+                buffer_species(j) = species(i)
+                buffer_xyz_species_supercell(j) = xyz_species_supercell(i)
+                buffer_species_supercell(j) = species_supercell(i)
+                buffer_fix_atom(1:3, j) = fix_atom(1:3, i)
+                j = j + 1
+             end if
+          end do
+       end if
        ! reallocate arrays if needed
        if (n_alloc < n_sites + n_recv) then
           n_alloc_old = n_alloc
