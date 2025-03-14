@@ -2535,6 +2535,9 @@ program turbogap
                     end do
                     global_positions_prev = global_positions_prev(:,sort_order)
                     global_velocities = global_velocities(:,sort_order)
+                    global_forces = global_forces(:,sort_order)
+                    global_energies = global_energies(sort_order)
+                    global_ids = global_ids(sort_order)
                  end if
               end if
            end if
