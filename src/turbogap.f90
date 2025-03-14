@@ -2503,7 +2503,7 @@ program turbogap
               if (params%do_mc ) exit_loop=.false.
            end if
 
-           if (params%do_dd .and. local_rank == 0) then
+           if (params%do_dd) then
               if ((md_istep == params%md_nsteps .and. .not. params%do_nested_sampling) &
                   .or. (modulo(md_istep, params%write_xyz) == 0 .and. .not. params%do_nested_sampling) &
                   .or. exit_loop) then
