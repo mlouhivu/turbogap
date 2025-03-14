@@ -1281,6 +1281,10 @@ program turbogap
         call mpi_bcast(xyz_species_supercell, 8*n_sp_sc, MPI_CHARACTER, 0, local_comm, ierr)
         call mpi_bcast(species, n_sp, MPI_INTEGER, 0, local_comm, ierr)
         call mpi_bcast(species_supercell, n_sp_sc, MPI_INTEGER, 0, local_comm, ierr)
+        call mpi_bcast(indices, 3, MPI_INTEGER, 0, local_comm, ierr) ! FIXME: is this needed?
+        call mpi_bcast(a_box, 3, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+        call mpi_bcast(b_box, 3, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+        call mpi_bcast(c_box, 3, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
         call cpu_time(time_grid_local(2))
         time_grid_local(3) = time_grid_local(3) &
                            + time_grid_local(2) - time_grid_local(1)
