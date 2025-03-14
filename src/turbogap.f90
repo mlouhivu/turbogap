@@ -2441,6 +2441,13 @@ program turbogap
                       &*dfloat(n_sites-1)*instant_temp)/v_uc*eVperA3tobar
               end do
            end if
+           ! update global energy in preparation for output
+           energy = sum(energies(1:n_sites_local))
+           if (params%do_dd) then
+              call mpi_allreduce(MPI_IN_PLACE, energy, &
+                                 1, MPI_DOUBLE_PRECISION, MPI_SUM, &
+                                 global_comm, ierr)
+           end if
 
            if (rank == 0) then
               !     Here we write thermodynamic information -> THIS NEEDS CLEAN UP AND IMPROVEMENT
@@ -2460,7 +2467,7 @@ program turbogap
                  !       Organize this better so that the user can have more freedom about what gets printed to thermo.log
                  !       There should also be a header preceded by # specifying what gets printed
                  write(10, "(I10, 1X, F16.6, 1X, F16.4, 1X, F20.8, 1X, F20.8, 1X, F20.8)", advance="no") &
-                      md_istep, md_time, instant_temp, E_kinetic, sum(energies), instant_pressure
+                      md_istep, md_time, instant_temp, E_kinetic, energy, instant_pressure
                  if( params%write_lv )then
                     write(10, "(1X, 9F20.8)", advance="no") a_box(1:3)/dfloat(indices(1)), &
                          b_box(1:3)/dfloat(indices(2)), &
