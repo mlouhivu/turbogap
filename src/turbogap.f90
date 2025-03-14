@@ -1072,11 +1072,11 @@ program turbogap
            end if
            call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, grid_comm, ierr)
            n_sites_global = n_sites
-           n_sites = distribute_counts(global_rank + 1)
+           n_sites_local = distribute_counts(global_rank + 1)
         end if
-        call mpi_bcast(n_sites, 1, MPI_INTEGER, 0, local_comm, ierr)
+        call mpi_bcast(n_sites_local, 1, MPI_INTEGER, 0, local_comm, ierr)
         call mpi_bcast(n_sites_global, 1, MPI_INTEGER, 0, local_comm, ierr)
-        n_sites_local = n_sites
+        n_sites = n_sites_local
         ! FIXME: either allow different values or use just one variable
         n_pos = n_sites
         n_sp = n_sites
