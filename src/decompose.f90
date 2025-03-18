@@ -212,6 +212,28 @@ module decompose
 
 
 !**************************************************************************
+  pure logical function is_monotonic(array, n) result(flag)
+    implicit none
+    integer, intent(in) :: array(:)
+    integer, intent(in) :: n
+    integer :: i, prev
+
+    flag = .true.
+    if (n > 1) then
+       prev = array(1)
+       do i = 2, n
+          if (array(i) < prev) then
+             flag = .false.
+             exit
+          end if
+       end do
+    end if
+  end function
+!**************************************************************************
+
+
+
+!**************************************************************************
   subroutine get_sort_order(order, keys, n, bins)
     implicit none
     integer, intent(out) :: order(n)
