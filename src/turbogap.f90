@@ -188,6 +188,7 @@ program turbogap
   integer, allocatable :: distribute_counts(:), distribute_displs(:)
   logical :: supercell_has_changed = .false.
   real*8 :: cm_vel(1:3), total_mass
+  real*8 :: norm(1:3)
 
   ! Nested sampling
   real*8 :: e_max, e_kin, rand, rand_scale(1:6)
@@ -2603,6 +2604,11 @@ program turbogap
            end if
            !
            !     If there are pressure/box rescaling operations they happen here
+           if (params%do_dd) then
+              norm(1) = norm2(a_box)
+              norm(2) = norm2(b_box)
+              norm(3) = norm2(c_box)
+           end if
            if( params%scale_box )then
               call box_scaling(positions(1:3, 1:n_sites), a_box(1:3), b_box(1:3), c_box(1:3), &
                    indices, md_istep, params%md_nsteps, params%box_scaling_factor)
@@ -2646,6 +2652,11 @@ program turbogap
                  c_box = c_box*dfloat(indices(3))
                  gd_istep = gd_istep + 1
               end if
+           end if
+           if (params%do_dd) then
+              grid_borders(1,:) = grid_borders(1,:) * norm2(a_box) / norm(1)
+              grid_borders(2,:) = grid_borders(2,:) * norm2(b_box) / norm(2)
+              grid_borders(3,:) = grid_borders(3,:) * norm2(c_box) / norm(3)
            end if
            !     If there are thermostating operations they happen here
            if( params%thermostat == "berendsen" )then
@@ -2726,6 +2737,8 @@ program turbogap
         if (params%do_dd) then
            call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
            call mpi_bcast(velocities, 3*n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+           call mpi_bcast(grid_borders, grid_borders_size, &
+                          MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
         else
            n_pos = size(positions,2)
            call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
