@@ -1358,6 +1358,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
 
     m = maxval(grid)
     allocate(borders(3, m + 1))
+    borders(:,:) = 0.0
     borders_size = (m + 1) * 3
   end subroutine
 !**************************************************************************
