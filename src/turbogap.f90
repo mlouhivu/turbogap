@@ -1026,6 +1026,12 @@ program turbogap
               call get_sort_order(sort_order, placement, n_sites, &
                                   params%dd_grid(1) * params%dd_grid(2) &
                                   * params%dd_grid(3))
+              if (n_sites /= n_pos &
+                  .or. n_sites /= n_sp &
+                  .or. n_sites /= n_sp_sc) then
+                 write(*,*) "ERROR: mismatch in sort_order size"
+                 ! FIXME: expand sorting to support supercells
+              end if
               allocate(global_positions(1:3, n_pos))
               allocate(global_positions_prev(1:3, n_pos))
               allocate(global_velocities(1:3, n_sp))
@@ -1125,6 +1131,9 @@ program turbogap
                         positions_prev, forces_prev, params%dd_debug)
         end if
         call mpi_bcast(n_sites_local, 1, MPI_INTEGER, 0, local_comm, ierr)
+        if (params%dd_debug .and. .not. rebuild_neighbors_list) then
+           write(*,*) "Rebuilding neighbors list due to migration"
+        end if
         rebuild_neighbors_list = .true.
      else
         call cpu_time(time_mpi(1))
@@ -1220,6 +1229,11 @@ program turbogap
               global_species_supercell = global_species_supercell(sort_order)
               global_fix_atom = global_fix_atom(:,sort_order)
               global_ids = global_ids(sort_order)
+              if (params%dd_debug) then
+                 if (.not. is_monotonic(global_ids, n_sites)) then
+                    write(*,*) "ERROR: global_ids is not monotonic (reorder)"
+                 end if
+              end if
            endif
            ! global
            call cpu_time(time_mpi_positions(1))
@@ -2539,6 +2553,11 @@ program turbogap
                     global_forces = global_forces(:,sort_order)
                     global_energies = global_energies(sort_order)
                     global_ids = global_ids(sort_order)
+                    if (params%dd_debug) then
+                       if (.not. is_monotonic(global_ids, n_sites)) then
+                          write(*,*) "ERROR: global_ids is not monotonic (output)"
+                       end if
+                    end if
                  end if
               end if
            end if
