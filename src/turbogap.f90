@@ -181,7 +181,7 @@ program turbogap
   integer :: local_rank, local_ntasks, global_rank, global_ntasks
   integer :: grid_neighbor(26)
   logical :: grid_periodic(3) = (/ .true., .true., .true. /)
-  integer :: grid_dims
+  integer :: grid_dims, grid_size
   real*8, allocatable :: grid_borders(:,:)
   integer :: grid_borders_size
   real*8 :: grid_surface(3,3)
@@ -627,6 +627,7 @@ program turbogap
     call check_grid(params%dd_grid, params%dd_grid_affinity)
     call grid_affinity(color, params%dd_grid, params%dd_grid_affinity, ntasks)
     call grid_dimensions(params%dd_grid, grid_dims)
+    grid_size = product(params%dd_grid)
     call mpi_comm_split(MPI_COMM_WORLD, color(rank + 1), rank, local_comm, ierr)
     call mpi_comm_size(local_comm, local_ntasks, ierr)
     call mpi_comm_rank(local_comm, local_rank, ierr)
@@ -644,9 +645,7 @@ program turbogap
     end if
     call mpi_bcast(grid_coords, global_ntasks * 3, MPI_INTEGER, 0, &
                    MPI_COMM_WORLD, ierr)
-    call mpi_bcast(grid_root, &
-                   params%dd_grid(1) * params%dd_grid(2) * params%dd_grid(3), &
-                   MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+    call mpi_bcast(grid_root, grid_size, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
     if (params%dd_debug) then
       call print_grid(rank, ntasks, local_rank, global_rank, color, &
                       params%dd_grid, grid_dims, grid_coords, grid_root)
@@ -1023,9 +1022,7 @@ program turbogap
               ! FIXME: assumes that n_sites == n_pos == n_sp == n_sp_sc
               !        if not true, sorting needs to be adjusted
               allocate(sort_order(n_sites))
-              call get_sort_order(sort_order, placement, n_sites, &
-                                  params%dd_grid(1) * params%dd_grid(2) &
-                                  * params%dd_grid(3))
+              call get_sort_order(sort_order, placement, n_sites, grid_size)
               if (n_sites /= n_pos &
                   .or. n_sites /= n_sp &
                   .or. n_sites /= n_sp_sc) then
@@ -1234,7 +1231,7 @@ program turbogap
                     write(*,*) "ERROR: global_ids is not monotonic (reorder)"
                  end if
               end if
-           endif
+           end if
            ! global
            call cpu_time(time_mpi_positions(1))
            call mpi_bcast(indices, 3, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
