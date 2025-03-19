@@ -1871,64 +1871,64 @@ program turbogap
            end if
 
            !       It would probably be faster to use pointers for this
-           allocate( all_energies(1:n_sites, 1:counter2) )
-           allocate( all_this_energies(1:n_sites, 1:counter2) )
+           allocate( all_energies(1:n_sites_local, 1:counter2) )
+           allocate( all_this_energies(1:n_sites_local, 1:counter2) )
            if( params%do_forces )then
-              allocate( all_forces(1:3, 1:n_sites, 1:counter2) )
-              allocate( all_this_forces(1:3, 1:n_sites, 1:counter2) )
+              allocate( all_forces(1:3, 1:n_sites_local, 1:counter2) )
+              allocate( all_this_forces(1:3, 1:n_sites_local, 1:counter2) )
               allocate( all_virial(1:3, 1:3, 1:counter2) )
               allocate( all_this_virial(1:3, 1:3, 1:counter2) )
            end if
            counter2 = 0
            if( n_soap_turbo > 0 )then
               counter2 = counter2 + 1
-              all_energies(1:n_sites, counter2) = energies_soap(1:n_sites)
+              all_energies(1:n_sites_local, counter2) = energies_soap(1:n_sites_local)
               if( params%do_forces )then
-                 all_forces(1:3, 1:n_sites, counter2) = forces_soap(1:3, 1:n_sites)
+                 all_forces(1:3, 1:n_sites_local, counter2) = forces_soap(1:3, 1:n_sites_local)
                  all_virial(1:3, 1:3, counter2) = virial_soap(1:3, 1:3)
               end if
            end if
            if( allocated(this_energies_vdw) )then
               counter2 = counter2 + 1
               !         Note the vdw things have "this" in front
-              all_energies(1:n_sites, counter2) = this_energies_vdw(1:n_sites)
+              all_energies(1:n_sites_local, counter2) = this_energies_vdw(1:n_sites_local)
               if( params%do_forces )then
-                 all_forces(1:3, 1:n_sites, counter2) = this_forces_vdw(1:3, 1:n_sites)
+                 all_forces(1:3, 1:n_sites_local, counter2) = this_forces_vdw(1:3, 1:n_sites_local)
                  all_virial(1:3, 1:3, counter2) = this_virial_vdw(1:3, 1:3)
               end if
            end if
            if( n_distance_2b > 0 )then
               counter2 = counter2 + 1
-              all_energies(1:n_sites, counter2) = energies_2b(1:n_sites)
+              all_energies(1:n_sites_local, counter2) = energies_2b(1:n_sites_local)
               if( params%do_forces )then
-                 all_forces(1:3, 1:n_sites, counter2) = forces_2b(1:3, 1:n_sites)
+                 all_forces(1:3, 1:n_sites_local, counter2) = forces_2b(1:3, 1:n_sites_local)
                  all_virial(1:3, 1:3, counter2) = virial_2b(1:3, 1:3)
               end if
            end if
            if( n_core_pot > 0 )then
               counter2 = counter2 + 1
-              all_energies(1:n_sites, counter2) = energies_core_pot(1:n_sites)
+              all_energies(1:n_sites_local, counter2) = energies_core_pot(1:n_sites_local)
               if( params%do_forces )then
-                 all_forces(1:3, 1:n_sites, counter2) = forces_core_pot(1:3, 1:n_sites)
+                 all_forces(1:3, 1:n_sites_local, counter2) = forces_core_pot(1:3, 1:n_sites_local)
                  all_virial(1:3, 1:3, counter2) = virial_core_pot(1:3, 1:3)
               end if
            end if
            if( n_angle_3b > 0 )then
               counter2 = counter2 + 1
-              all_energies(1:n_sites, counter2) = energies_3b(1:n_sites)
+              all_energies(1:n_sites_local, counter2) = energies_3b(1:n_sites_local)
               if( params%do_forces )then
-                 all_forces(1:3, 1:n_sites, counter2) = forces_3b(1:3, 1:n_sites)
+                 all_forces(1:3, 1:n_sites_local, counter2) = forces_3b(1:3, 1:n_sites_local)
                  all_virial(1:3, 1:3, counter2) = virial_3b(1:3, 1:3)
               end if
            end if
 
            !       Here we communicate
            if (params%do_dd) then
-              call mpi_reduce(all_energies, all_this_energies, n_sites&
+              call mpi_reduce(all_energies, all_this_energies, n_sites_local&
                    &*counter2, MPI_DOUBLE_PRECISION, MPI_SUM, 0,&
                    & local_comm, ierr)
               if( params%do_forces )then
-                 call mpi_reduce(all_forces, all_this_forces, 3*n_sites&
+                 call mpi_reduce(all_forces, all_this_forces, 3*n_sites_local&
                       &*counter2, MPI_DOUBLE_PRECISION, MPI_SUM, 0,&
                       & local_comm, ierr)
                  call mpi_reduce(all_virial, all_this_virial, 9*counter2&
@@ -1936,11 +1936,11 @@ program turbogap
                       & local_comm, ierr)
               end if
            else
-              call mpi_reduce(all_energies, all_this_energies, n_sites&
+              call mpi_reduce(all_energies, all_this_energies, n_sites_local&
                    &*counter2, MPI_DOUBLE_PRECISION, MPI_SUM, 0,&
                    & MPI_COMM_WORLD, ierr)
               if( params%do_forces )then
-                 call mpi_reduce(all_forces, all_this_forces, 3*n_sites&
+                 call mpi_reduce(all_forces, all_this_forces, 3*n_sites_local&
                       &*counter2, MPI_DOUBLE_PRECISION, MPI_SUM, 0,&
                       & MPI_COMM_WORLD, ierr)
                  call mpi_reduce(all_virial, all_this_virial, 9*counter2&
@@ -1953,44 +1953,44 @@ program turbogap
            counter2 = 0
            if( n_soap_turbo > 0 )then
               counter2 = counter2 + 1
-              energies_soap(1:n_sites) = all_this_energies(1:n_sites, counter2)
+              energies_soap(1:n_sites_local) = all_this_energies(1:n_sites_local, counter2)
               if( params%do_forces )then
-                 forces_soap(1:3, 1:n_sites) = all_this_forces(1:3, 1:n_sites, counter2)
+                 forces_soap(1:3, 1:n_sites_local) = all_this_forces(1:3, 1:n_sites_local, counter2)
                  virial_soap(1:3, 1:3) = all_this_virial(1:3, 1:3, counter2)
               end if
            end if
            if( allocated(this_energies_vdw) )then
               counter2 = counter2 + 1
               !         Note the vdw things DO NOT have "this" in front anymore
-              energies_vdw(1:n_sites) = all_this_energies(1:n_sites, counter2)
+              energies_vdw(1:n_sites_local) = all_this_energies(1:n_sites_local, counter2)
               deallocate(this_energies_vdw)
               if( params%do_forces )then
-                 forces_vdw(1:3, 1:n_sites) = all_this_forces(1:3, 1:n_sites, counter2)
+                 forces_vdw(1:3, 1:n_sites_local) = all_this_forces(1:3, 1:n_sites_local, counter2)
                  virial_vdw(1:3, 1:3) = all_this_virial(1:3, 1:3, counter2)
                  deallocate(this_forces_vdw)
               end if
            end if
            if( n_distance_2b > 0 )then
               counter2 = counter2 + 1
-              energies_2b(1:n_sites) = all_this_energies(1:n_sites, counter2)
+              energies_2b(1:n_sites_local) = all_this_energies(1:n_sites_local, counter2)
               if( params%do_forces )then
-                 forces_2b(1:3, 1:n_sites) = all_this_forces(1:3, 1:n_sites, counter2)
+                 forces_2b(1:3, 1:n_sites_local) = all_this_forces(1:3, 1:n_sites_local, counter2)
                  virial_2b(1:3, 1:3) = all_this_virial(1:3, 1:3, counter2)
               end if
            end if
            if( n_core_pot > 0 )then
               counter2 = counter2 + 1
-              energies_core_pot(1:n_sites) = all_this_energies(1:n_sites, counter2)
+              energies_core_pot(1:n_sites_local) = all_this_energies(1:n_sites_local, counter2)
               if( params%do_forces )then
-                 forces_core_pot(1:3, 1:n_sites) = all_this_forces(1:3, 1:n_sites, counter2)
+                 forces_core_pot(1:3, 1:n_sites_local) = all_this_forces(1:3, 1:n_sites_local, counter2)
                  virial_core_pot(1:3, 1:3) = all_this_virial(1:3, 1:3, counter2)
               end if
            end if
            if( n_angle_3b > 0 )then
               counter2 = counter2 + 1
-              energies_3b(1:n_sites) = all_this_energies(1:n_sites, counter2)
+              energies_3b(1:n_sites_local) = all_this_energies(1:n_sites_local, counter2)
               if( params%do_forces )then
-                 forces_3b(1:3, 1:n_sites) = all_this_forces(1:3, 1:n_sites, counter2)
+                 forces_3b(1:3, 1:n_sites_local) = all_this_forces(1:3, 1:n_sites_local, counter2)
                  virial_3b(1:3, 1:3) = all_this_virial(1:3, 1:3, counter2)
               end if
            end if
