@@ -2029,9 +2029,9 @@ program turbogap
            end if
            if (params%do_dd .and. local_rank == 0) then
               ! gather energies (+ forces and virials) from all domains
-              call mpi_gather(n_sites_local, 1, MPI_INTEGER, &
-                              distribute_counts, 1, MPI_INTEGER, &
-                              0, global_comm, ierr)
+              call mpi_allgather(n_sites_local, 1, MPI_INTEGER, &
+                                 distribute_counts, 1, MPI_INTEGER, &
+                                 global_comm, ierr)
               distribute_displs(1) = 0
               do i = 2, global_ntasks
                  distribute_displs(i) = distribute_displs(i-1) + distribute_counts(i-1)
@@ -2520,9 +2520,9 @@ program turbogap
                   .or. (modulo(md_istep, params%write_xyz) == 0 .and. .not. params%do_nested_sampling) &
                   .or. exit_loop) then
                  ! gather global_positions_prev
-                 call mpi_gather(n_sites_local, 1, MPI_INTEGER, &
-                                 distribute_counts, 1, MPI_INTEGER, &
-                                 0, global_comm, ierr)
+                 call mpi_allgather(n_sites_local, 1, MPI_INTEGER, &
+                                    distribute_counts, 1, MPI_INTEGER, &
+                                    global_comm, ierr)
                  distribute_displs(1) = 0
                  do i = 2, global_ntasks
                     distribute_displs(i) = distribute_displs(i-1) + distribute_counts(i-1)
