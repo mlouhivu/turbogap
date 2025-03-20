@@ -1015,6 +1015,7 @@ program turbogap
                           0, grid_comm, ierr)
            call mpi_bcast(grid_borders, grid_borders_size, MPI_DOUBLE_PRECISION, &
                           0, grid_comm, ierr)
+           call check_domain_size(grid_borders, params%dd_grid, rcut_max)
            ! reorder positions and velocities based on domain placement
            if (global_rank == 0) then
               call grid_placement(placement, params%dd_grid, grid_root, n_sites, &
@@ -2755,6 +2756,7 @@ program turbogap
            call mpi_bcast(velocities, 3*n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
            call mpi_bcast(grid_borders, grid_borders_size, &
                           MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
+           call check_domain_size(grid_borders, params%dd_grid, rcut_max)
         else
            n_pos = size(positions,2)
            call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)

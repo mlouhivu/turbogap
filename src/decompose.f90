@@ -1398,6 +1398,44 @@ subroutine migration_mask(mask, border, norm, n_pos)
 
 
 !**************************************************************************
+  subroutine check_domain_size(borders, grid, min_width)
+    use mpi
+    implicit none
+
+    real*8, intent(out) :: borders(:,:)
+    integer, intent(in) :: grid(3)
+    real*8, intent(in) :: min_width
+
+    real*8 :: width(3)
+    integer :: i, j
+    integer :: rank, ierr
+
+    call mpi_comm_rank(MPI_COMM_WORLD, rank, ierr)
+
+    do i = 1,3
+      width(i) = borders(i, grid(i) + 1) ! largest possible width
+      do j = 2, grid(i)
+        width(i) = min(width(i), borders(i,j) - borders(i,j-1))
+      end do
+    end do
+    if (minval(width(1:3)) < min_width) then
+       if (rank == 0) then
+          write(*,*) ""
+          write(*,*) &
+             & "ERROR: Domains are too small. Distance across any domain needs to be"
+          write(*,"(a,x,f0.3,x,a)") &
+             & "        at least", min_width, "Å."
+          write(*,"(a,x,f0.3,x,f0.3,x,f0.3)") &
+             & "          domain cross-widths (min.):", width(1:3)
+       end if
+       stop
+    end if
+  end subroutine
+!**************************************************************************
+
+
+
+!**************************************************************************
   subroutine print_grid(rank, ntasks, local_rank, global_rank, color, &
                         grid, grid_dims, grid_coords, grid_root)
     use mpi
