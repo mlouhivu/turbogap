@@ -934,7 +934,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
     real*8, allocatable :: norm(:,:), tmp_norm(:,:)
     logical, allocatable :: mask(:,:), tmp_mask(:,:)
     integer :: n_alloc_old
-    integer :: i, j, n, s, e, ierr
+    integer :: i, j, n, o, s, e, ierr
     integer :: src, tgt
     integer :: n_send, n_recv
     integer :: n_send_alloc=100
@@ -1155,10 +1155,13 @@ subroutine migration_mask(mask, border, norm, n_pos)
                          grid_comm, status, ierr)
        n_sites = n_sites + n_recv
        ! calculate new norms and update masks
-       call vectorised_projection(norm(1:3, s:e), surface, &
-                                  positions(1:3, s:e), n_recv)
-       call exchange_mask(mask(1:6, s:e), local_border, norm(1:3, s:e), &
-                          n_recv, rcut_max)
+       if (mod(n,2) == 0) then
+          o = s - n_halo_recv(n-1)
+          call vectorised_projection(norm(1:3, o:e), surface, &
+                                     positions(1:3, o:e), n_recv)
+          call exchange_mask(mask(1:6, o:e), local_border, norm(1:3, o:e), &
+                             n_recv, rcut_max)
+       end if
     end do
     ! deallocate buffers
     deallocate(buffer_ids)
