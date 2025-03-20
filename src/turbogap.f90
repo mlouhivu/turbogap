@@ -1228,7 +1228,7 @@ program turbogap
               global_fix_atom = global_fix_atom(:,sort_order)
               global_ids = global_ids(sort_order)
               if (params%dd_debug) then
-                 if (.not. is_monotonic(global_ids, n_sites)) then
+                 if (.not. is_monotonic(global_ids, n_sites_global)) then
                     write(*,*) "ERROR: global_ids is not monotonic (reorder)"
                  end if
               end if
@@ -2552,7 +2552,7 @@ program turbogap
                     global_energies = global_energies(sort_order)
                     global_ids = global_ids(sort_order)
                     if (params%dd_debug) then
-                       if (.not. is_monotonic(global_ids, n_sites)) then
+                       if (.not. is_monotonic(global_ids, n_sites_global)) then
                           write(*,*) "ERROR: global_ids is not monotonic (output)"
                        end if
                     end if
