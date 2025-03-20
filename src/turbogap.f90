@@ -2674,6 +2674,7 @@ program turbogap
               grid_borders(1,:) = grid_borders(1,:) * norm2(a_box) / norm(1)
               grid_borders(2,:) = grid_borders(2,:) * norm2(b_box) / norm(2)
               grid_borders(3,:) = grid_borders(3,:) * norm2(c_box) / norm(3)
+              call check_domain_size(grid_borders, params%dd_grid, rcut_max)
            end if
            !     If there are thermostating operations they happen here
            if( params%thermostat == "berendsen" )then
@@ -2754,9 +2755,6 @@ program turbogap
         if (params%do_dd) then
            call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
            call mpi_bcast(velocities, 3*n_sp, MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
-           call mpi_bcast(grid_borders, grid_borders_size, &
-                          MPI_DOUBLE_PRECISION, 0, local_comm, ierr)
-           call check_domain_size(grid_borders, params%dd_grid, rcut_max)
         else
            n_pos = size(positions,2)
            call mpi_bcast(positions, 3*n_pos, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
