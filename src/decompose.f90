@@ -512,7 +512,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
        counts(i+1) = count(mask(i,:))
     end do
     if (sum(counts) /= n_pos) then
-       write(*,*) "Error: multiple migration targets"
+       write(*,*) "ERROR: multiple migration targets"
        stop
     end if
   end subroutine
@@ -1263,7 +1263,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
              end if
           end do
           if (debug .and. .not. found) then
-             write(*,*) "Warning: Force", buffer_ids(i), "not updated"
+             write(*,*) "WARNING: Force", buffer_ids(i), "not updated"
           end if
        end do
     end do
