@@ -1371,9 +1371,9 @@ program turbogap
         if(allocated(n_neigh_local)) deallocate(n_neigh_local)
      end if
 
-     call build_neighbors_list(positions(1:3, 1:n_pos), a_box, b_box, c_box, params%do_timing, &
+     call build_neighbors_list(positions(1:3, 1:n_sites), a_box, b_box, c_box, params%do_timing, &
           species_supercell, rcut_max, n_atom_pairs, rjs, &
-          thetas, phis, xyz, n_neigh_local, neighbors_list, neighbor_species, n_sites_local, indices, &
+          thetas, phis, xyz, n_neigh_local, neighbors_list, neighbor_species, n_sites, indices, &
           rebuild_neighbors_list, do_list, local_rank)
      if( rebuild_neighbors_list )then
         !     Get total number of atom pairs
@@ -1410,6 +1410,11 @@ program turbogap
      j_end = n_atom_pairs
      n_atom_pairs_by_rank(rank+1) = n_atom_pairs
 #endif
+     if (params%dd_debug .and. local_rank == 0) then
+        write(*,"(a,i0,a,i0,a,i0,a,i0)") &
+           & " [", global_rank, "] n_sites_local=", n_sites_local, &
+           & " n_sites=", n_sites, " n_atom_pairs=", n_atom_pairs
+     end if
      !   Compute the volume of the "primitive" unit cell
      v_uc = dot_product( cross_product(a_box, b_box), c_box ) / (dfloat(indices(1)*indices(2)*indices(3)))
      call cpu_time(time2)
