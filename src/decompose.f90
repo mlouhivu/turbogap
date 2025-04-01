@@ -979,9 +979,6 @@ subroutine migration_mask(mask, border, norm, n_pos)
     allocate(buffer_xyz_species_supercell(n_send_alloc))
     allocate(buffer_species_supercell(n_send_alloc))
     allocate(buffer_fix_atom(3, n_send_alloc))
-    if (debug) then
-       write(*,*) "send buffers allocated:", n_send_alloc
-    end if
 
     do n = 1, 6
        if (mod(n,2) == 0) then
@@ -1011,7 +1008,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
                          grid_comm, status, ierr)
        n_halo_send(n) = n_send
        n_halo_recv(n) = n_recv
-       ! allocate buffers
+       ! reallocate buffers
        if (n_send_alloc < n_send) then
           deallocate(buffer_ids)
           deallocate(buffer_positions)
@@ -1033,7 +1030,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
           allocate(buffer_species_supercell(n_send_alloc))
           allocate(buffer_fix_atom(3, n_send_alloc))
           if (debug) then
-             write(*,*) "send buffers allocated:", n_send_alloc
+             write(*,*) "(halo exchange) buffers reallocated:", n_send_alloc
           end if
        end if
        ! copy ghost sites to send buffers
@@ -1163,6 +1160,12 @@ subroutine migration_mask(mask, border, norm, n_pos)
                              n_recv, rcut_max)
        end if
     end do
+    if (debug) then
+       write(*,"(a,i0,a,x,i0,x,i0,x,i0,x,i0,x,i0,x,i0)") &
+          & " (halo exchange) [", global_rank, "] send:", n_halo_send
+       write(*,"(a,i0,a,x,i0,x,i0,x,i0,x,i0,x,i0,x,i0)") &
+          & " (halo exchange) [", global_rank, "] recv:", n_halo_recv
+    end if
     ! deallocate buffers
     deallocate(buffer_ids)
     deallocate(buffer_positions)
