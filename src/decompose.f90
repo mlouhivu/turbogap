@@ -1150,6 +1150,31 @@ subroutine migration_mask(mask, border, norm, n_pos)
                          fix_atom(1:3, s:e), 3 * n_recv, &
                          MPI_LOGICAL, src, 0, &
                          grid_comm, status, ierr)
+       ! remove duplicates
+       if (n_recv > 0 .and. n_sites > 0) then
+          j = s - 1
+          do i = s, e
+             if (.not. any(ids(1:i-1) == ids(i))) then
+                j = j + 1
+                if (j /= i) then
+                   ids(j) = ids(i)
+                   positions(1:3, j) = positions(1:3, i)
+                   velocities(1:3, j) = velocities(1:3, i)
+                   masses(j) = masses(i)
+                   xyz_species(j) = xyz_species(i)
+                   species(j) = species(i)
+                   xyz_species_supercell(j) = xyz_species_supercell(i)
+                   species_supercell(j) = species_supercell(i)
+                   fix_atom(1:3, j) = fix_atom(1:3, i)
+                end if
+             end if
+          end do
+          if (debug .and. j /= e) then
+             write(*,*) "(halo exchange) duplicates removed:", e - j
+          end if
+          e = j
+          n_recv = j - s + 1
+       end if
        n_sites = n_sites + n_recv
        ! calculate new norms and update masks
        if (mod(n,2) == 0) then
