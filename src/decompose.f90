@@ -1000,7 +1000,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
        ! how many ghost sites to send / receive?
        n_send = 0
        if (tgt /= MPI_PROC_NULL) then
-          n_send = count(mask(n,:))
+          n_send = count(mask(n,1:n_sites))
        end if
        n_recv = 0
        call mpi_sendrecv(n_send, 1, MPI_INTEGER, tgt, 0, &
@@ -1101,6 +1101,9 @@ subroutine migration_mask(mask, border, norm, n_pos)
           tmp_mask(1:6, 1:n_alloc_old) = mask(1:6, 1:n_alloc_old)
           deallocate(mask)
           call move_alloc(tmp_mask, mask)
+          if (debug) then
+             write(*,*) "(halo exchange) arrays reallocated:", n_alloc
+          end if
        end if
        ! halo exchange
        s = 1 + n_sites
@@ -1154,7 +1157,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
        if (n_recv > 0 .and. n_sites > 0) then
           j = s - 1
           do i = s, e
-             if (.not. any(ids(1:i-1) == ids(i))) then
+             if (.not. any(ids(1:j) == ids(i))) then
                 j = j + 1
                 if (j /= i) then
                    ids(j) = ids(i)
@@ -1174,15 +1177,22 @@ subroutine migration_mask(mask, border, norm, n_pos)
           end if
           e = j
           n_recv = j - s + 1
+          n_halo_recv(n) = n_recv
        end if
        n_sites = n_sites + n_recv
        ! calculate new norms and update masks
        if (mod(n,2) == 0) then
-          o = s - n_halo_recv(n-1)
-          call vectorised_projection(norm(1:3, o:e), surface, &
-                                     positions(1:3, o:e), n_recv)
-          call exchange_mask(mask(1:6, o:e), local_border, norm(1:3, o:e), &
-                             n_recv, rcut_max)
+          s = s - n_halo_recv(n-1)
+          n_recv = n_recv + n_halo_recv(n-1)
+          if (n_recv > 0) then
+             if (debug) then
+                write(*,*) "(halo exchange) calculate new norms+masks:", n_recv, s, e
+             end if
+             call vectorised_projection(norm(1:3, s:e), surface, &
+                                        positions(1:3, s:e), n_recv)
+             call exchange_mask(mask(1:6, s:e), local_border, norm(1:3, s:e), &
+                                n_recv, rcut_max)
+          end if
        end if
     end do
     if (debug) then
@@ -1201,6 +1211,9 @@ subroutine migration_mask(mask, border, norm, n_pos)
     deallocate(buffer_xyz_species_supercell)
     deallocate(buffer_species_supercell)
     deallocate(buffer_fix_atom)
+    ! deallocate local arrays
+    deallocate(norm)
+    deallocate(mask)
   end subroutine
 !**************************************************************************
 
