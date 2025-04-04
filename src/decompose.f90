@@ -1251,7 +1251,7 @@ subroutine migration_mask(mask, border, norm, n_pos)
     allocate(buffer_ids(n_buffer_alloc))
     allocate(buffer_forces(3, n_buffer_alloc))
     if (debug) then
-       write(*,*) "halo_forces buffers allocated:", n_buffer_alloc
+       write(*,*) "(halo forces) buffers allocated:", n_buffer_alloc
     end if
 
     ! offset for sending
@@ -1275,10 +1275,16 @@ subroutine migration_mask(mask, border, norm, n_pos)
           tgt = MPI_PROC_NULL
        end if
        ! how many ghost sites were sent / received in halo exchange?
-       n_send = n_halo_recv(n)
-       n_recv = n_halo_send(n)
+       n_send = 0
+       if (tgt /= MPI_PROC_NULL) then
+          n_send = n_halo_recv(n)
+       end if
+       n_recv = 0
+       call mpi_sendrecv(n_send, 1, MPI_INTEGER, tgt, 0, &
+                         n_recv, 1, MPI_INTEGER, src, 0, &
+                         grid_comm, status, ierr)
        if (debug) then
-          write(*,*) "halo_forces: n_send=", n_send, "n_recv=", n_recv
+          write(*,*) "(halo forces) n_send=", n_send, "n_recv=", n_recv
        end if
        ! halo exchange
        e = s + n_send - 1
