@@ -1212,6 +1212,11 @@ program turbogap
                    write(*,*) "time(grid_distribute):", time_grid_distribute(3)
                  end if
               end if
+              if (params%dd_debug) then
+                 ! print out all IDs local to a domain
+                 write(*,"(a,i0,a,*(i0,x))") &
+                    & " [", global_rank, "] ids=", ids(1:n_sites_local)
+              end if
            end if
            if (rank == 0) then
               ! reorder global arrays back to original order
